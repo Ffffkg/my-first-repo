@@ -318,3 +318,18 @@ def test_learn_pua_map_tie(tmp_path, monkeypatch):
     m, info = pua.learn_pua_map()
     assert m[ch["sp"]] == "sp" and m[ch["ii@5"]] == "ii" and m[ch["d"]] == "d"
     assert info["pause_fit"] == 1.0 and not info["low_purity"]
+
+
+def test_margin_offset():
+    from hakka_c.durations import margin_offset
+    m = 0.05
+    # 一般情況:前後都裁到 50 ms
+    assert abs(margin_offset(0.60, 2.00, 2.50, 2.00 + m - (0.60 - m), m) - 0.55) < 1e-9
+    # 原檔第一個音素前不到 50 ms:起點 0
+    assert margin_offset(0.03, 2.00, 2.50, 2.05, m) == 0.0
+    # 原檔最後一個音素後不到 50 ms:句尾被原檔長度截斷,仍可接受
+    assert abs(margin_offset(0.60, 2.48, 2.50, 2.50 - 0.55, m) - 0.55) < 1e-9
+    # 沒有被裁切(長度等於原檔)
+    assert margin_offset(0.60, 2.00, 2.50, 2.50, m) == 0.0
+    # 對不上任何情況
+    assert margin_offset(0.60, 2.00, 2.50, 1.20, m) is None

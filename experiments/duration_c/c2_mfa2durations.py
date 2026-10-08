@@ -28,10 +28,10 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from hakka_c import config as C  # noqa: E402
-from hakka_c.durations import merge_blank, mfa_to_frames  # noqa: E402
+from hakka_c.durations import margin_offset, merge_blank, mfa_to_frames  # noqa: E402
 from hakka_c.pua import resolve_pua_map  # noqa: E402
 from hakka_c.structure import StructError, build_utt, is_pause  # noqa: E402
-from hakka_c.textgrid import read_textgrid  # noqa: E402
+from hakka_c.textgrid import find_tier, read_textgrid  # noqa: E402
 
 
 def xcorr_offset(trim, orig, sr_orig, max_off_s=8.0, win_s=3.0):
@@ -64,7 +64,7 @@ def main():
     ap.add_argument("--orig-root", help="原始(未裁切)wav 的根目錄")
     ap.add_argument("--max-lead-ms", type=float, default=600, help="推算後句首留白上限")
     ap.add_argument("--min-lead-ms", type=float, default=-15, help="容許第一個音素稍早於 0 的誤差")
-    ap.add_argument("--tail-tol-ms", type=float, default=25, help="margin 模式:句尾留白與 margin 的容許差")
+    ap.add_argument("--tail-tol-ms", type=float, default=25, help="margin 模式:實際音檔長度與推算長度的容許差")
     ap.add_argument("--out-dir", help="預設依 Matcha 慣例:<音檔>.parent.parent/durations")
     ap.add_argument("--cleaners", default="hakka_cleaners")
     ap.add_argument("--limit", type=int, default=0)
@@ -111,7 +111,9 @@ def main():
                 sym = [pua[c] for c in clean]
                 if stem not in tg_idx:
                     raise StructError("找不到 TextGrid")
-                utt = build_utt(stem, sym, read_textgrid(tg_idx[stem]))
+                tiers = read_textgrid(tg_idx[stem])
+                utt = build_utt(stem, sym, tiers)
+                orig_dur = max(b for _, b, _ in find_tier(tiers, "phones"))   # TextGrid 長度 = 原始音檔長度
                 info = sf.info(wav)
                 n_samp = info.frames
                 T = n_samp // C.HOP
@@ -122,7 +124,10 @@ def main():
                         raise StructError("offset csv 沒有這句")
                     off = offsets[stem]
                 elif args.offset_mode == "margin":
-                    off = max(0.0, utt.phone_iv[0][0] - args.margin_ms / 1000)
+                    off = margin_offset(utt.phone_iv[0][0], utt.phone_iv[-1][1], orig_dur, n_samp / C.SR,
+                                        args.margin_ms / 1000, args.tail_tol_ms / 1000)
+                    if off is None:
+                        raise StructError("音檔長度與裁切規則對不上")
                 else:
                     if stem not in orig_idx:
                         raise StructError("找不到原始音檔")
@@ -135,19 +140,17 @@ def main():
                 tail = (n_samp / C.SR - (utt.phone_iv[-1][1] - off)) * 1000
                 if not (args.min_lead_ms <= lead <= args.max_lead_ms) or tail < args.min_lead_ms:
                     raise StructError("推算後的句首/句尾留白不合理")
-                if args.offset_mode == "margin" and off > 0 and abs(tail - args.margin_ms) > args.tail_tol_ms:
-                    # resample_audio.py 句尾也只留 margin;不符代表這句沒有照規則裁切,offset 不可信
-                    raise StructError("句尾留白與 margin 不符(這句可能沒有被裁切)")
                 pause = [i for i, nm in enumerate(sym) if is_pause(nm)]
                 fr = mfa_to_frames(len(sym), utt.phone_sym, utt.phone_iv, T, pause, off)
-                # 自我檢查:左右 blank 都只有 1 frame 的內部音素,經 merge_blank(half) 應還原成 MFA frame 數(±1)
+                # 自我檢查:左右 blank 都只有 1 frame 的內部音素,經 merge_blank(half) 應還原成 MFA frame 數。
+                # 容許 ±2 frame:極短音素(MFA 10 ms ≈ 0.86 frame)取整成 0 時必須向鄰居借 frame。
                 mb = merge_blank(fr, "half")
                 for k, i in enumerate(utt.phone_sym[1:-1], start=1):
                     if fr[2 * i] != 1 or fr[2 * i + 2] != 1:
                         continue
                     a_ = utt.phone_iv[k]
                     want = round((a_[1] - off) * C.SR / C.HOP) - round((a_[0] - off) * C.SR / C.HOP)
-                    if abs(mb[i] - max(want, 1)) > 1.01:
+                    if abs(mb[i] - max(want, 1)) > 2.01:
                         raise StructError("merge 還原檢查失敗")
                 leads.append(lead)
                 tails.append(tail)

@@ -136,3 +136,16 @@ def mfa_to_frames(n_sym, phone_sym, phone_iv, T, pause_pos=(), offset_s=0.0):
         fr[p] += 1
     assert fr.sum() == T and fr.min() >= 1, (fr.sum(), T, fr.min())
     return fr
+
+
+def margin_offset(first_start, last_end, orig_dur, dur22, margin_s, tol_s=0.025):
+    """重現 resample_audio.py 的裁切:start = max(0, 第一個音素起點 − margin),
+    stop = 最後一個音素終點 + margin(sf.read 讀到原檔結尾就停,所以等於 min(原檔長度, …));
+    stop <= start 時不裁切。回傳裁切起點(秒);若實際長度和兩種情況都對不上,回傳 None。"""
+    if abs(dur22 - orig_dur) <= tol_s:          # 沒有被裁切
+        return 0.0
+    start = max(0.0, first_start - margin_s)
+    stop = min(orig_dur, last_end + margin_s)
+    if abs((stop - start) - dur22) <= tol_s:
+        return start
+    return None
