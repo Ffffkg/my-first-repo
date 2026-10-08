@@ -10,11 +10,12 @@ Matcha 0.0.7 的 TextMelDataset 在 load_durations: true 時,會讀
     --offset-mode zero    TextGrid 本來就是在 22 kHz 裁切後音檔上對齊的(例如你重跑過 MFA)
     --offset-mode csv     resample_audio.py 有記錄:--offset-csv 檔案每行 stem,offset_秒
     --offset-mode margin  依裁切規則推算:offset = 第一個音素起點 − margin(--margin-ms,看 resample_audio.py)
+                          你的 resample_audio.py:MARGIN = 0.05 → 用 --margin-ms 50
     --offset-mode xcorr   用原始音檔做互相關自動對位(--orig-root 原始 wav 根目錄;最穩,但較慢)
   不論哪種,程式都會檢查推算後的句首/句尾留白是否合理,不合理的句子排除並列出。
 
-    python c2_mfa2durations.py --dialect sixian --offset-mode xcorr --orig-root ~/HAT/tts_sixian --dry-run --limit 50
-    python c2_mfa2durations.py --dialect sixian --offset-mode xcorr --orig-root ~/HAT/tts_sixian
+    python c2_mfa2durations.py --dialect sixian --offset-mode margin --margin-ms 50 --dry-run --limit 200
+    python c2_mfa2durations.py --dialect sixian --offset-mode margin --margin-ms 50
 """
 import argparse
 import csv
@@ -28,7 +29,8 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from hakka_c import config as C  # noqa: E402
 from hakka_c.durations import merge_blank, mfa_to_frames  # noqa: E402
-from hakka_c.structure import StructError, build_utt, is_pause, load_pua_map  # noqa: E402
+from hakka_c.pua import resolve_pua_map  # noqa: E402
+from hakka_c.structure import StructError, build_utt, is_pause  # noqa: E402
 from hakka_c.textgrid import read_textgrid  # noqa: E402
 
 
@@ -62,6 +64,7 @@ def main():
     ap.add_argument("--orig-root", help="原始(未裁切)wav 的根目錄")
     ap.add_argument("--max-lead-ms", type=float, default=600, help="推算後句首留白上限")
     ap.add_argument("--min-lead-ms", type=float, default=-15, help="容許第一個音素稍早於 0 的誤差")
+    ap.add_argument("--tail-tol-ms", type=float, default=25, help="margin 模式:句尾留白與 margin 的容許差")
     ap.add_argument("--out-dir", help="預設依 Matcha 慣例:<音檔>.parent.parent/durations")
     ap.add_argument("--cleaners", default="hakka_cleaners")
     ap.add_argument("--limit", type=int, default=0)
@@ -72,7 +75,8 @@ def main():
     sys.path.insert(0, str(C.MATCHA))
     from matcha.text import text_to_sequence
 
-    pua = load_pua_map(C.VOCAB_JSON)
+    pua, src = resolve_pua_map((args.cleaners,))
+    print(f"PUA 對照表:{src}")
     d_dir = C.filelist(args.mode, args.dialect, "x").parent
     names = args.lists or sorted(p.stem for p in d_dir.glob("*.txt") if not p.stem.endswith("_mfadur"))
     tg_idx = {p.stem: p for p in C.textgrid_dir(args.dialect).rglob("*.TextGrid")}
@@ -131,6 +135,9 @@ def main():
                 tail = (n_samp / C.SR - (utt.phone_iv[-1][1] - off)) * 1000
                 if not (args.min_lead_ms <= lead <= args.max_lead_ms) or tail < args.min_lead_ms:
                     raise StructError("推算後的句首/句尾留白不合理")
+                if args.offset_mode == "margin" and off > 0 and abs(tail - args.margin_ms) > args.tail_tol_ms:
+                    # resample_audio.py 句尾也只留 margin;不符代表這句沒有照規則裁切,offset 不可信
+                    raise StructError("句尾留白與 margin 不符(這句可能沒有被裁切)")
                 pause = [i for i, nm in enumerate(sym) if is_pause(nm)]
                 fr = mfa_to_frames(len(sym), utt.phone_sym, utt.phone_iv, T, pause, off)
                 # 自我檢查:左右 blank 都只有 1 frame 的內部音素,經 merge_blank(half) 應還原成 MFA frame 數(±1)

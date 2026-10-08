@@ -133,11 +133,13 @@ TextGrid 對齊的是**原始未裁切**音檔;22 kHz 訓練音檔被 `resample_
 | 不確定 | `--offset-mode xcorr --orig-root <原始 wav 根目錄>`(用互相關自動對位,最穩) |
 | 已在 22 kHz 音檔上重跑過 MFA | `--offset-mode zero` |
 
-先試跑 50 句、不寫檔,看句首/句尾留白的分布是否集中在 margin 附近:
+你的 `resample_audio.py` 是「第一個與最後一個 word 前後各留 `MARGIN = 0.05` 秒」(probe 已確認),
+所以用 margin 模式、50 ms。程式也會檢查句尾留白是否約等於 50 ms,不符的句子(例如沒被裁切的)會被排除。
+先試跑 200 句、不寫檔,看句首/句尾留白是否都集中在 50 ms:
 
 ```bash
-python c2_mfa2durations.py --dialect sixian --offset-mode xcorr --orig-root ~/HAT/tts_sixian --dry-run --limit 50
-python c2_mfa2durations.py --dialect sixian --offset-mode xcorr --orig-root ~/HAT/tts_sixian     # 正式
+python c2_mfa2durations.py --dialect sixian --offset-mode margin --margin-ms 50 --dry-run --limit 200
+python c2_mfa2durations.py --dialect sixian --offset-mode margin --margin-ms 50          # 正式
 ```
 
 會寫出 `data/sixian/wav22k/durations/<stem>.npy`(Matcha 規定的位置)與每份清單的
@@ -191,11 +193,15 @@ python c_compare.py --base   ~/hakka_tts/exp_c/eval/hakka_joint_sixian_ladder_1h
 ## 7. 我做的假設(probe_env.py 會逐一檢查)
 
 1. 文字 cleaner 名稱是 `hakka_cleaners`(不同就加 `--cleaners`)。
-2. `benchmark/hakka_matcha_vocab.json` 裡找得到「PUA 字元 ↔ 符號名稱」對照(程式用啟發式搜尋)。
+2. 「PUA 字元 ↔ 音素」對照:你的 benchmark 裡沒有 `hakka_matcha_vocab.json`,程式會先找其他 JSON
+   (每個候選都用 TextGrid 驗證),找不到就**直接從 filelist + TextGrid 學出來**,存成
+   `~/hakka_tts/exp_c/pua_map_learned.json`(可以打開檢查,`readable` 欄位是人看得懂的版本)。
 3. 符號名稱去掉 `@聲調` 後與 MFA 音素標籤相同;停頓符號叫 `sp` / `sil`。
 4. TextGrid 有 `words` 與 `phones` 兩層,words 層每個 word 是一個拼音音節(如 `siid5`)。
 5. checkpoint 在 `logs/train/<exp>/runs/<日期>/checkpoints/best_*_<驗證損失>.ckpt`,取最新一次 run。
 6. 從零訓練模型的 mel buffer 等於 data config 的統計量(手冊第 9.3 節);遷移模型要加 `--data-yaml`。
+   較早訓練的 joint checkpoint 沒有 `encoder.tone_table`(patch_joint_tonetable.py 之後才加),
+   載入時只容許缺這兩個查找表,其他任何不符都會報錯。
 7. `evaluate_v2.analyze_wav()` 可以直接吃 numpy 波形,回傳 `(f0, mcep)`。
    (torch ≥ 2.6 的 `torch.load` 預設 `weights_only=True` 會拒絕 Matcha checkpoint;程式已自動改用
    `weights_only=False` 載入你自己訓練的 checkpoint。)

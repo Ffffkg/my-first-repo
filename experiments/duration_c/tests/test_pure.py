@@ -303,3 +303,18 @@ def test_scripts_end_to_end(tmp_path, monkeypatch):
                         "--method", str(out / "class_cum.csv"), "--n-boot", "200"], capture_output=True, text=True, env=env)
     assert r.returncode == 0, r.stderr
     assert "✓ 通過" in r.stdout
+
+
+def test_learn_pua_map_tie(tmp_path, monkeypatch):
+    """每句都恰好有一個 ii 與一個 sp(長度差都能解釋)時,要選出讓對照最一致的停頓字元。"""
+    import hakka_c.pua as pua
+    p = tmp_path / "a.TextGrid"
+    p.write_text(LONG_TG, encoding="utf-8")
+    ch = {n: chr(0xE000 + i) for i, n in enumerate(["s", "ii@5", "d", "sp", "o@24", "ng"])}
+    text = "".join(ch[n] for n in ["s", "ii@5", "d", "sp", "d", "o@24", "ng"])
+    monkeypatch.setattr(pua, "_sample_lines", lambda n, seed=0: [("sixian", ("/x/u%d.wav" % i, "0", text)) for i in range(20)])
+    monkeypatch.setattr(pua, "_tg_index", lambda d: {"u%d" % i: p for i in range(20)})
+    monkeypatch.setattr(pua, "_clean", lambda t, c=None: t)
+    m, info = pua.learn_pua_map()
+    assert m[ch["sp"]] == "sp" and m[ch["ii@5"]] == "ii" and m[ch["d"]] == "d"
+    assert info["pause_fit"] == 1.0 and not info["low_purity"]

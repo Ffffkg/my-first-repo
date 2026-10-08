@@ -9,7 +9,6 @@
 """
 import inspect
 import io
-import json
 import platform
 import re
 import sys
@@ -99,32 +98,24 @@ def matcha():
 
 
 def vocab():
-    data = json.load(open(C.VOCAB_JSON, encoding="utf-8"))
-    print("  頂層型別:", type(data).__name__)
-    if isinstance(data, dict):
-        for k in list(data)[:15]:
-            v = data[k]
-            rep = repr(v)[:160]
-            print(f"    key {k!r}: {type(v).__name__} {rep}")
-    else:
-        print("   ", repr(data[:5])[:400])
-    from hakka_c.structure import load_pua_map
-    m = load_pua_map(C.VOCAB_JSON)
-    items = list(m.items())
-    print(f"  load_pua_map → {len(m)} 個;範例:", [(f"U+{ord(a):04X}", b) for a, b in items[:12]])
+    from hakka_c.pua import resolve_pua_map
+    m, src = resolve_pua_map()
+    print(f"  採用:{src}")
+    print("  範例:", [(f"U+{ord(a):04X}", b) for a, b in sorted(m.items())[:15]])
     sys.path.insert(0, str(C.MATCHA))
     from matcha.text import cleaners
     from matcha.text.symbols import symbols as syms
-    print("  matcha.text.symbols 長度:", len(syms), "前 5:", [repr(s) for s in syms[:5]])
-    missing = [f"U+{ord(ch):04X}" for ch in m if ch not in syms]
-    print("  對照表中不在 symbols 裡的 PUA 字元:", missing[:10] or "無")
+    print("  matcha.text.symbols 長度:", len(syms))
     print("  cleaners 有 hakka_cleaners:", hasattr(cleaners, "hakka_cleaners"))
+    cands = sorted(C.BENCH.glob("*.json")) + sorted(C.HAKKA.glob("*/*vocab*.json"))
+    print("  benchmark 等處的 JSON:", [str(p.relative_to(C.HAKKA)) for p in cands][:15])
 
 
 def structure():
-    from hakka_c.structure import StructError, build_utt, load_pua_map
+    from hakka_c.pua import resolve_pua_map
+    from hakka_c.structure import StructError, build_utt
     from hakka_c.textgrid import read_textgrid
-    pua = load_pua_map(C.VOCAB_JSON)
+    pua, _ = resolve_pua_map(verbose=False)
     sys.path.insert(0, str(C.MATCHA))
     from matcha.text import text_to_sequence
     for d in C.DIALECTS:
@@ -222,6 +213,10 @@ def selfcheck():
     r = read_filelist(C.filelist("joint", d, "test"))[0]
     ok, msg = eng.selfcheck(r["text"], r["spk"])
     print(f"  自寫合成路徑 vs model.synthesise():{'一致 ✓' if ok else '★不一致'}({msg});mel 統計量來源 {eng.stats_src}")
+    import yaml
+    dc = yaml.safe_load(open(C.MATCHA / "configs" / "data" / f"hakka_joint_{d}_ladder_48h.yaml", encoding="utf-8"))
+    print(f"  mel buffer ({eng.mel_mean:.4f}, {eng.mel_std:.4f}) vs data config "
+          f"({dc['data_statistics']['mel_mean']}, {dc['data_statistics']['mel_std']})")
 
 
 if __name__ == "__main__":

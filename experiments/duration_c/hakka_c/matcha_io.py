@@ -78,25 +78,24 @@ def textgrid_index(dialect):
     return idx
 
 
+# 較早訓練的 joint 模型存檔時還沒有這兩個查找表(patch_joint_tonetable.py 之後才加);
+# 它們在建立模型時就由前端表產生,joint 推論不會用到,所以容許缺少。其他任何缺漏都視為錯誤。
+OPTIONAL_BUFFERS = {"encoder.tone_table", "encoder.phoneme_table"}
+
+
 def load_matcha(ckpt, device):
-    """torch ≥ 2.6 的 torch.load 預設 weights_only=True,會拒絕含 OmegaConf 超參數的 Matcha checkpoint。
-    依序嘗試:Lightning 的 weights_only=False → 手動 torch.load(weights_only=False) 後重建模型。
-    (checkpoint 是你自己訓練的,可信任。)"""
-    try:
-        return MatchaTTS.load_from_checkpoint(str(ckpt), map_location=device, weights_only=False)
-    except TypeError:                       # 舊版 Lightning 沒有 weights_only 參數
-        pass
-    except Exception as e:  # noqa: BLE001
-        if "weights_only" not in str(e) and "WeightsUnpickler" not in str(e):
-            raise
-    try:
-        return MatchaTTS.load_from_checkpoint(str(ckpt), map_location=device)
-    except Exception as e:  # noqa: BLE001
-        if "weights_only" not in str(e) and "WeightsUnpickler" not in str(e):
-            raise
+    """手動載入(取代 load_from_checkpoint):
+    * torch ≥ 2.6 的 torch.load 預設 weights_only=True,會拒絕含 OmegaConf 超參數的 checkpoint;
+      這裡用 weights_only=False(checkpoint 是你自己訓練的,可信任)。
+    * 只容許缺少 OPTIONAL_BUFFERS,其餘 missing / unexpected key 一律報錯。"""
     state = torch.load(str(ckpt), map_location=device, weights_only=False)
     model = MatchaTTS(**state["hyper_parameters"])
-    model.load_state_dict(state["state_dict"])
+    res = model.load_state_dict(state["state_dict"], strict=False)
+    missing = [k for k in res.missing_keys if k not in OPTIONAL_BUFFERS]
+    if missing or res.unexpected_keys:
+        raise RuntimeError(f"checkpoint 與模型不符:missing={missing} unexpected={res.unexpected_keys}")
+    if res.missing_keys:
+        print(f"  註:checkpoint 沒有 {res.missing_keys}(較早的模型;使用建立模型時產生的查找表)")
     return model
 
 
@@ -118,8 +117,12 @@ class Engine:
         self.cleaners = list(cleaners)
         if ckpt is None and vocab_json is None:
             self.pua = {}                     # 測試用:直接給 model、不處理文字
+        elif vocab_json:
+            self.pua = load_pua_map(vocab_json)
         else:
-            self.pua = load_pua_map(vocab_json or C.VOCAB_JSON)
+            from .pua import resolve_pua_map
+            self.pua, src = resolve_pua_map(self.cleaners, verbose=False)
+            print(f"PUA 對照表:{src}")
         if mel_stats is None:
             mel_stats = (float(self.model.mel_mean), float(self.model.mel_std))
             self.stats_src = "model buffer"
