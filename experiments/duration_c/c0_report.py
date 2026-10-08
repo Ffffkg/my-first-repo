@@ -1,0 +1,169 @@
+"""實驗 C0 的報表:讀 c0_diag.py 的逐音節 CSV,輸出 Markdown(不需要 GPU)。
+
+    python c0_report.py ~/hakka_tts/exp_c/c0/hakka_joint_sixian_ladder_48h_test_all.csv
+
+報表內容(對應手冊第 25.3 節):
+  0. 回歸核對(--first 100 的 48h baseline 應重現主表)
+  1. 偏差拆解:總偏差 = 目標偏差(MAS−MFA)+ 預測偏差(w−MAS)+ 取整偏差(ceil(w)−w)
+  2. blank 分配規則敏感度
+  3. 偏差對參考時長分箱(檢驗「短母音都被高估」)
+  4. 迴歸:誤差 ~ 參考時長 + 是否入聲 + 語者,看 β(入聲)
+  5. 分組預覽(實驗 F1):韻尾、調值、停頓前、性別
+  6. 依結果建議下一步
+"""
+import argparse
+import sys
+from pathlib import Path
+
+import numpy as np
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from hakka_c import config as C  # noqa: E402
+from hakka_c.csvio import boolcol, read_cols  # noqa: E402
+from hakka_c.durations import RULES  # noqa: E402
+from hakka_c.stats import UttTable, boot_idx, delta_ci, excludes_zero, fmt, mean_ci, ols_boot  # noqa: E402
+
+COMPONENTS = [  # (名稱, 預測欄, 參考欄)
+    ("總偏差 ceil−MFA(主表 ET-VBias 量的就是這個)", "ceil", "ref"),
+    ("├ 目標偏差 MAS−MFA(訓練目標本身)", "mas", "ref"),
+    ("├ 預測偏差 w−MAS(時長預測器)", "cont", "mas"),
+    ("└ 取整偏差 ceil(w)−w(推論時 ceil)", "ceil", "cont"),
+    ("若改用累積四捨五入:cum−MFA", "cum", "ref"),
+]
+
+
+def col(c, src, rule):
+    return c["ref_ms"] if src == "ref" else c[f"{src}_{rule}_ms"]
+
+
+def report(path, n_boot, md):
+    c = read_cols(path)
+    et = boolcol(c["entering"])
+    stems = c["stem"]
+    cond, protocol, dialect = c["cond"][0], c["protocol"][0], c["dialect"][0]
+    md(f"# C0 診斷:{cond}({Path(path).stem})\n")
+    md(f"句數 {len(set(stems))}、入聲 {et.sum()}、舒聲 {(~et).sum()}。CI = 以句子為單位的 cluster bootstrap {n_boot} 次。\n")
+    errs = {}
+    for name, a, b in COMPONENTS:
+        errs[name] = col(c, a, "half") - col(c, b, "half")
+    t = UttTable(stems, {k: v for k, v in errs.items()}, {"et": et, "non": ~et})
+    idx = boot_idx(t.U, n_boot)
+
+    # 0. 回歸核對
+    if protocol == "first100" and cond.endswith("_48h") and dialect in C.MAIN_TABLE_48H:
+        exp = C.MAIN_TABLE_48H[dialect]
+        got_et, got_non = t.mean(COMPONENTS[0][0], "et"), t.mean(COMPONENTS[0][0], "non")
+        ok = abs(got_et - exp["et_vbias"]) <= 1.5 and abs(got_non - exp["nonet_vbias"]) <= 1.5
+        md("## 0. 回歸核對(與手冊主表比較)\n")
+        md(f"| | 本程式 | 主表 |\n|---|---|---|\n| ET-VBias | {got_et:+.1f} | {exp['et_vbias']:+.1f} |\n"
+           f"| NonET-VBias | {got_non:+.1f} | {exp['nonet_vbias']:+.1f} |\n")
+        md("→ " + ("✓ 重現主表(差距 ≤ 1.5 ms),後面的拆解可以信任。\n" if ok else
+                   "★ 沒有重現主表。先不要往下解讀;請把這份報表貼回對話,一起找出第一個分歧點。\n"))
+
+    # 1. 拆解
+    md("## 1. 偏差拆解(blank 規則 = half)\n")
+    md("| 成分 | 入聲 (ms) | 舒聲 (ms) | Δ = 入聲 − 舒聲 |\n|---|---|---|---|")
+    res = {}
+    for name, _, _ in COMPONENTS:
+        e, n_, d = mean_ci(t, name, "et", idx), mean_ci(t, name, "non", idx), delta_ci(t, name, idx)
+        res[name] = (e, n_, d)
+        md(f"| {name} | {fmt(e)} | {fmt(n_)} | {fmt(d)} |")
+    tot, tgt, prd, qnt = (res[COMPONENTS[i][0]] for i in range(4))
+    gap = abs(tot[0][0] - (tgt[0][0] + prd[0][0] + qnt[0][0]))
+    md(f"\n恆等式檢查:目標 + 預測 + 取整 − 總偏差 = {gap:.3f} ms(應為 0)。\n")
+
+    # 2. blank 規則
+    md("## 2. blank 分配規則敏感度\n")
+    md("| 規則 | 總偏差 入聲 | 總偏差 ΔBias | 目標偏差 入聲 | 目標偏差 ΔBias |\n|---|---|---|---|---|")
+    flip = False
+    for rule in RULES:
+        e1 = col(c, "ceil", rule) - c["ref_ms"]
+        e2 = col(c, "mas", rule) - c["ref_ms"]
+        tt = UttTable(stems, {"tot": e1, "tgt": e2}, {"et": et, "non": ~et})
+        d1 = delta_ci(tt, "tot", idx)
+        flip |= not (d1[1] > 0)
+        md(f"| {rule} | {fmt(mean_ci(tt, 'tot', 'et', idx))} | {fmt(d1)} | {fmt(mean_ci(tt, 'tgt', 'et', idx))} | {fmt(delta_ci(tt, 'tgt', idx))} |")
+    md("\n(none = 不把 blank 算給任何音素,是母音時長的下界。)\n")
+
+    # 3. 分箱
+    md("## 3. 總偏差對參考母音時長分箱\n")
+    edges = [0, 40, 60, 80, 100, 120, 140, 170, 200, 1e9]
+    e = errs[COMPONENTS[0][0]]
+    md("| 參考時長 (ms) | 入聲 平均誤差 (n) | 舒聲 平均誤差 (n) |\n|---|---|---|")
+    for lo, hi in zip(edges[:-1], edges[1:]):
+        m = (c["ref_ms"] >= lo) & (c["ref_ms"] < hi)
+        cells = []
+        for g in (et, ~et):
+            k = m & g
+            cells.append(f"{e[k].mean():+.1f} ({k.sum()})" if k.sum() >= 10 else f"— ({k.sum()})")
+        md(f"| {lo:.0f}–{'' if hi > 1e8 else f'{hi:.0f}'} | {cells[0]} | {cells[1]} |")
+    md("\n如果同樣長度的入聲與舒聲誤差差不多,「入聲額外偏長」主要是「短母音都被高估」(回歸平均)。\n")
+
+    # 4. 迴歸
+    md("## 4. 迴歸:誤差 = β0 + β1·參考時長 + β2·是否入聲 + 語者\n")
+    spk = c["spk"].astype(int)
+    spks = sorted(set(spk))
+    ref_c = c["ref_ms"] - c["ref_ms"].mean()
+    X = np.column_stack([np.ones_like(ref_c), ref_c, et.astype(float)] + [(spk == s).astype(float) for s in spks[1:]])
+    md("| 依變數 | β1 每 ms 參考時長 | β2 入聲 (ms) |\n|---|---|---|")
+    beta2 = {}
+    for label, y in (("總偏差", errs[COMPONENTS[0][0]]), ("目標偏差", errs[COMPONENTS[1][0]])):
+        b, lo, hi = ols_boot(y, X, stems, n_boot=min(n_boot, 2000))
+        beta2[label] = (b[2], lo[2], hi[2])
+        md(f"| {label} | {b[1]:+.3f} [{lo[1]:+.3f}, {hi[1]:+.3f}] | {fmt((b[2], lo[2], hi[2]))} |")
+    md("")
+
+    # 5. 分組
+    md("## 5. 分組預覽(實驗 F1):總偏差的入聲 ET-VBias\n")
+    md("| 分組 | 值 | n | ET-VBias |\n|---|---|---|---|")
+    for key, label in (("coda", "韻尾"), ("tone", "調值"), ("prepausal", "停頓前"), ("gender", "性別")):
+        for v in sorted(set(c[key][et])):
+            m = et & (c[key] == v)
+            if m.sum() < 15:
+                continue
+            tt = UttTable(stems[m], {"e": e[m]}, {"all": np.ones(m.sum(), bool)})
+            ii = boot_idx(tt.U, min(n_boot, 2000))
+            shown = int(v) if isinstance(v, float) and float(v).is_integer() else v
+            md(f"| {label} | {shown} | {m.sum()} | {fmt(mean_ci(tt, 'e', 'all', ii))} |")
+    md("\n(分組是事先登記的四個因素,全部列出;樣本少於 15 的組不列。)\n")
+
+    # 6. 建議
+    md("## 6. 依結果建議的下一步(手冊第 25.3 節決策表)\n")
+    d_tot, d_tgt, d_prd = tot[2][0], tgt[2][0], prd[2][0]
+    tips = []
+    if flip:
+        tips.append("ΔBias 在某些 blank 規則下 CI 碰到 0 或翻轉 → 結論對量測方法敏感,**先做實驗 D**(從波形量)。")
+    if excludes_zero(tgt[2]) and d_tot > 0 and d_tgt / d_tot >= 0.5:
+        tips.append(f"ΔBias 有 {100 * d_tgt / d_tot:.0f}% 來自訓練目標(MAS)→ **優先做 C2**(MFA 時長監督)。")
+    if excludes_zero(prd[2]) and d_tot > 0 and d_prd / d_tot >= 0.5:
+        tips.append(f"ΔBias 有 {100 * d_prd / d_tot:.0f}% 來自時長預測器 → **做 C3**(預測器改良)。")
+    q_et = qnt[0][0]
+    if abs(q_et) >= 3:
+        tips.append(f"ceil 取整讓入聲母音平均多 {q_et:+.1f} ms(舒聲 {qnt[1][0]:+.1f} ms)→ C1 改用累積四捨五入可直接去掉這部分,幾乎不花成本。")
+    b2 = beta2["總偏差"]
+    if not excludes_zero(b2):
+        tips.append("控制參考時長後 β2(入聲)的 CI 含 0 → 入聲額外偏長主要可由「短母音被高估」解釋,論文 ΔBias 的解讀要補上這一點。")
+    if not tips:
+        tips.append("沒有單一來源佔多數:C2、C3 都可能需要;先做 C1 當基準線,再做 C2(變因較單純)。")
+    for s in tips:
+        md(f"- {s}")
+    md("")
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("csv", nargs="+")
+    ap.add_argument("--n-boot", type=int, default=10000)
+    args = ap.parse_args()
+    for p in args.csv:
+        lines = []
+        report(p, args.n_boot, lines.append)
+        text = "\n".join(lines)
+        print(text)
+        out = Path(p).with_suffix(".md")
+        out.write_text(text, encoding="utf-8")
+        print(f"\n→ 已寫入 {out}\n")
+
+
+if __name__ == "__main__":
+    main()
