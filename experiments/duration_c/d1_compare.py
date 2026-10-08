@@ -141,9 +141,9 @@ def main():
           f"| rET-VBias | {sa['ret_vbias_pct']:+.1f}% | {sw['ret_vbias_pct']:+.1f}% |", ""]
     dw = sw["delta_bias"]
     if dw[1] > 0:
-        L.append("→ 從波形量,入聲母音仍然「額外」偏長(ΔBias CI 不含 0):ICASSP 的結論在波形層級成立。")
+        L.append("→ 從波形量,入聲母音仍然「額外」偏長(ΔBias CI 不含 0):入聲偏長在波形層級也成立。")
     elif dw[2] < 0:
-        L.append("→ 從波形量,入聲母音反而相對較短:attn 版的 ΔBias 主要來自 blank 分配的約定,論文結論需要修正。")
+        L.append("→ 從波形量,入聲母音反而相對較短:attn 版的 ΔBias 主要來自 blank 分配的約定,「入聲偏長」的結論需要修正。")
     else:
         L.append("→ 從波形量,ΔBias 的 CI 含 0:attn 版看到的入聲額外偏長,在波形層級不顯著。")
     L.append("\n注意:MFA 是在真人錄音上訓練的,對合成語音可能較不準;關鍵比較請再用專家手標的合成片段(D3)複核。")
