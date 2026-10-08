@@ -9,6 +9,7 @@ import numpy as np
 from .config import HOP_MS, SPK_GENDER
 from .durations import matcha_frames, merge_blank
 from .stats import UttTable, boot_idx, delta_ci, fmt, mean_ci, pearson
+from .structure import base_of
 
 
 def scaled_w(rec, s_et=1.0, s_non=1.0):
@@ -29,6 +30,7 @@ def base_row(rec, s):
         "gender": SPK_GENDER.get(rec["spk"], "?"), "syl_idx": s["idx"], "word": s["word"],
         "tone": s["tone"], "entering": int(s["entering"]), "coda": s["coda"],
         "prepausal": int(s["prepausal"]), "ref_ms": round(s["ref_ms"], 3),
+        "nuc_phone": base_of(rec["names"][s["nuc"]]) if rec.get("names") else "",
     }
 
 

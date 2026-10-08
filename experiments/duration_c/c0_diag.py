@@ -96,6 +96,9 @@ def main():
         src = {"mas": mas.astype(float), "cont": w, "ceil": matcha_frames(w, mode="ceil"),
                "cum": matcha_frames(w, mode="cum")}
         merged = {(s, rule): merge_blank(v, rule) * C.HOP_MS for s, v in src.items() for rule in RULES}
+        # 音素層級的總長比(只算音素,不含停頓與頭尾靜音;blank 依 half 規則分回音素)
+        mfa_ms = sum(b - a for a, b in utt.phone_iv) * 1000
+        phone_ratio = float(merged[("ceil", "half")][utt.phone_sym].sum()) / mfa_ms
         rec = {"dialect": args.dialect, "stem": stem, "spk": r["spk"], "T": T, "w": w, "mas": mas,
                "n": len(names), "names": names, "pause": [i for i, nm in enumerate(names) if is_pause(nm)],
                "syllables": [asdict(s) for s in utt.syllables]}
@@ -107,6 +110,7 @@ def main():
             row["utt_T"] = T
             row["utt_ceil"] = int(src["ceil"].sum())
             row["utt_cont"] = round(float(w.sum()), 2)
+            row["utt_phone_ratio"] = round(phone_ratio, 4)
             out_rows.append(row)
         if (j + 1) % 50 == 0:
             print(f"  {j + 1}/{len(rows)}  {time.time() - t0:.0f}s")
@@ -120,7 +124,9 @@ def main():
     if skipped:
         print("跳過:", dict(skipped.most_common()))
     ratio = sum(matcha_frames(r["w"]).sum() for r in recs) / max(1, sum(r["T"] for r in recs))
-    print(f"合成/真實總長比(ceil){ratio:.3f};接著執行:python c0_report.py {base}.csv")
+    pr = [r["utt_phone_ratio"] for r in out_rows]
+    print(f"合成/真實總長比:整句含靜音 {ratio:.3f};只算音素 ≈ {sum(pr) / max(len(pr), 1):.3f}")
+    print(f"接著執行:python c0_report.py {base}.csv")
 
 
 if __name__ == "__main__":
