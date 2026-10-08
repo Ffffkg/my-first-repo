@@ -153,8 +153,9 @@ python c2_setup.py --base-exp hakka_joint_sixian_ladder_1h        # 只改 data 
 # 依畫面印出的指令:先用 --cfg job 確認 load_durations / use_precomputed_durations 都是 true,再背景訓練
 ```
 
-建議順序:四縣、海陸的 **1h** 先跑(約 2 小時/個,依手冊實驗 B 的測速),有方向再跑最大資料量。
-想用實驗 B 的固定 40,000 步規則,就用 `--base-exp fair1h_joint_sixian_scratch_s1234`。
+建議用實驗 B 的固定 40,000 步規則當基準(兩邊只差訓練目標,約 2 小時/個):
+`--base-exp fair1h_joint_sixian_scratch_s1234`、`--base-exp fair1h_joint_hailu_scratch_s1234`。
+新實驗名稱會是 `c2_mfadur_fair1h_joint_<腔>_scratch_s1234`。有方向再跑最大資料量。
 
 ### 4.3 評估
 
@@ -168,12 +169,33 @@ python c_compare.py --base   ~/hakka_tts/exp_c/eval/hakka_joint_sixian_ladder_1h
 `c_compare.py` 最後會列出手冊第 25.8 節的成功標準與通過與否。門檻是**建議值**
 (NonET ±5 ms、MCD +0.1 dB、F0 +0.05 st),與老師確認後用參數改成登記的數字。
 
-## 5. C3
+## 5. D1:從波形量母音時長(評估 C2 一定要做)
+
+C0 顯示 MAS 把很多時間放在母音前後的 blank(每個 30–80 ms),所以「attn 推得的母音時長」很依賴
+blank 怎麼分。baseline(MAS)和 C2(blank 只有 1 frame)的 blank 結構不同,**只用 attn 版比較兩者
+不公平**,一定要從波形量。做法:用當初對齊真人錄音的同一套 MFA 模型,對齊合成語音。
+
+```bash
+python c_eval.py --exp fair1h_joint_sixian_scratch_s1234 --dialect sixian --synth      # 合成 + 存 wav 與邊界
+python d1_prepare_mfa.py --eval-dir ~/hakka_tts/exp_c/eval/fair1h_joint_sixian_scratch_s1234__base --dialect sixian
+#   → 切到 MFA 的環境,執行畫面印出的 mfa align 指令
+python d1_compare.py --eval-dir ~/hakka_tts/exp_c/eval/fair1h_joint_sixian_scratch_s1234__base --dialect sixian
+```
+
+`d1_summary.md` 會回答:從波形量入聲還偏長嗎、attn 版差多少、哪種 blank 規則最接近波形。
+兩個系統都跑完 D1 後,用波形版比較:
+
+```bash
+python c_compare.py --base   <baseline eval 資料夾>/syllables_wave.csv \
+                    --method <C2 eval 資料夾>/syllables_wave.csv
+```
+
+## 6. C3
 
 依 C0 的結果決定要不要做(手冊第 25.6 節)。等 C0 報表出來後,我再依結果寫
 (預測器加音節結構特徵 / 音節層級時長 / 損失改良)。
 
-## 6. 檔案一覽
+## 7. 檔案一覽
 
 | 檔案 | 用途 | 需要 GPU |
 |---|---|---|
@@ -185,12 +207,14 @@ python c_compare.py --base   ~/hakka_tts/exp_c/eval/hakka_joint_sixian_ladder_1h
 | `c_compare.py` | 兩系統配對比較 + 成功標準檢查 | 否 |
 | `c2_mfa2durations.py` | C2:TextGrid → durations/*.npy、*_mfadur.txt | 否 |
 | `c2_setup.py` | C2:由 baseline 產生 data / experiment config | 否 |
+| `d1_prepare_mfa.py` | D1:合成音檔 → MFA corpus(wav + 拼音 .lab),印出 mfa align 指令 | 否 |
+| `d1_compare.py` | D1:波形 vs attn 母音時長、blank 比例、波形版 ET 指標 | 否 |
 | `hakka_c/` | 共用模組(路徑常數、TextGrid、符號對應、時長換算、統計、Matcha 介面) | — |
 | `tests/` | 單元測試:`python -m pytest tests -q`(不需 GPU) | 否 |
 
 輸出都在 `~/hakka_tts/exp_c/`:`c0/`、`c1/<模型>/`、`eval/<模型>__<變體>/`。
 
-## 7. 我做的假設(probe_env.py 會逐一檢查)
+## 8. 我做的假設(probe_env.py 會逐一檢查)
 
 1. 文字 cleaner 名稱是 `hakka_cleaners`(不同就加 `--cleaners`)。
 2. 「PUA 字元 ↔ 音素」對照:你的 benchmark 裡沒有 `hakka_matcha_vocab.json`,程式會先找其他 JSON
