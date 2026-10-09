@@ -190,6 +190,23 @@ python c_compare.py --base   <baseline eval 資料夾>/syllables_wave.csv \
                     --method <C2 eval 資料夾>/syllables_wave.csv
 ```
 
+## 5b. 一行跑完 D1、多種子、聽測
+
+```bash
+# 合成 + MFA 對齊 + 波形比較(一個系統一行)
+bash d1_pipeline.sh sixian base_sixian_step40000 fair1h_joint_sixian_scratch_s1234 --which step40000
+python c_compare.py --base ~/hakka_tts/exp_c/eval/base_sixian_step40000 --method ~/hakka_tts/exp_c/eval/c2_sixian_step40000 --syl wave
+python f1_subgroups.py <系統1>/syllables_wave.csv <系統2>/syllables_wave.csv      # 實驗 F1:依韻尾/調值/停頓前/性別
+
+# 換訓練種子(不用新 config:Hydra 覆寫 seed 與 run_name,輸出資料夾跟著 run_name)
+cd ~/Matcha-TTS && python matcha/train.py experiment=c2_mfadur_fair1h_joint_sixian_scratch_s1234 seed=123 run_name=c2_mfadur_fair1h_joint_sixian_scratch_s123
+
+# 實驗 E2:成對比較聽測
+python e_build_ab.py --a <系統A 的 eval 資料夾> --b <系統B 的 eval 資料夾> --n 30 --out ~/hakka_tts/exp_e/<名稱>
+#   把 <out>/listening_test/ 整個資料夾交給聽者(瀏覽器開 index.html,作答完下載 CSV 回傳);key.csv 自己保留
+python e_analyze.py --key ~/hakka_tts/exp_e/<名稱>/key.csv --responses <放回傳 CSV 的資料夾>
+```
+
 ## 6. C3
 
 依 C0 的結果決定要不要做(手冊第 25.6 節)。等 C0 報表出來後,我再依結果寫
@@ -209,6 +226,10 @@ python c_compare.py --base   <baseline eval 資料夾>/syllables_wave.csv \
 | `c2_setup.py` | C2:由 baseline 產生 data / experiment config | 否 |
 | `d1_prepare_mfa.py` | D1:合成音檔 → MFA corpus(wav + 拼音 .lab),印出 mfa align 指令 | 否 |
 | `d1_compare.py` | D1:波形 vs attn 母音時長、blank 比例、波形版 ET 指標 | 否 |
+| `d1_pipeline.sh` | 一行跑完 合成 → MFA 對齊 → 波形比較 | 是 |
+| `f1_subgroups.py` | F1:依韻尾、調值、停頓前、性別分組的 VBias / VDE / ρ | 否 |
+| `e_build_ab.py` | E2:產生成對比較聽測(HTML + 音檔,響度正規化,含注意力檢查題) | 否 |
+| `e_analyze.py` | E2:CMOS 與偏好比例,聽者×句子交叉重抽 CI,注意力檢查排除 | 否 |
 | `hakka_c/` | 共用模組(路徑常數、TextGrid、符號對應、時長換算、統計、Matcha 介面) | — |
 | `tests/` | 單元測試:`python -m pytest tests -q`(不需 GPU) | 否 |
 
