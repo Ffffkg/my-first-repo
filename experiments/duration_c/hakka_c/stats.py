@@ -64,7 +64,7 @@ def excludes_zero(c):
 
 def pearson(a, b):
     a, b = np.asarray(a, float), np.asarray(b, float)
-    if len(a) < 3:
+    if len(a) < 3 or a.std() == 0 or b.std() == 0:
         return float("nan")
     return float(np.corrcoef(a, b)[0, 1])
 

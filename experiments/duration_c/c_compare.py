@@ -19,10 +19,13 @@ from hakka_c.csvio import boolcol, read_cols  # noqa: E402
 from hakka_c.stats import UttTable, boot_idx, ci, delta_ci, fmt, mean_ci, pearson  # noqa: E402
 
 
-def load(p):
+def load(p, syl_kind="attn"):
     p = Path(p).expanduser()
     if p.is_dir():
-        syl = read_cols(p / "syllables.csv")
+        f = p / ("syllables_wave.csv" if syl_kind == "wave" else "syllables.csv")
+        if not f.exists():
+            raise FileNotFoundError(f"{f} 不存在" + (":先跑 d1_prepare_mfa.py / mfa align / d1_compare.py" if syl_kind == "wave" else ""))
+        syl = read_cols(f)
         mcd = read_cols(p / "mcd.csv") if (p / "mcd.csv").exists() else None
         return syl, mcd, p.name
     return read_cols(p), None, p.stem
@@ -64,6 +67,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--base", required=True)
     ap.add_argument("--method", required=True)
+    ap.add_argument("--syl", choices=("attn", "wave"), default="attn",
+                    help="輸入是資料夾時,時長用 attn(syllables.csv)或波形(D1 的 syllables_wave.csv);MCD 照樣讀 mcd.csv")
     ap.add_argument("--n-boot", type=int, default=10000)
     ap.add_argument("--max-nonet-change", type=float, default=5.0, help="守門:NonET-VBias 變化上限 (ms)")
     ap.add_argument("--max-mcd-increase", type=float, default=0.1, help="守門:MCD 增加上限 (dB)")
@@ -71,8 +76,8 @@ def main():
     ap.add_argument("--out", help="Markdown 輸出路徑")
     args = ap.parse_args()
 
-    a, ma, na = load(args.base)
-    b, mb, nb = load(args.method)
+    a, ma, na = load(args.base, args.syl)
+    b, mb, nb = load(args.method, args.syl)
     ia, ib, n_a, n_b = join_syllables(a, b)
     et = boolcol(a["entering"][ia])
     ref = a["ref_ms"][ia]
@@ -81,7 +86,7 @@ def main():
                  {"et": et, "non": ~et})
     idx = boot_idx(t.U, args.n_boot)
 
-    L = [f"# 配對比較:{nb}(方法)vs {na}(基準)\n",
+    L = [f"# 配對比較:{nb}(方法)vs {na}(基準)| 時長來源:{'波形(D1)' if args.syl == 'wave' else 'attn'}\n",
          f"共同音節 {len(ia)}(基準 {n_a}、方法 {n_b}),句數 {t.U}。CI = 以句子為單位配對重抽 {args.n_boot} 次。\n",
          "| 指標 | 基準 | 方法 | 方法 − 基準 |", "|---|---|---|---|"]
     r_et = (mean_ci(t, "a", "et", idx), mean_ci(t, "b", "et", idx), mean_ci(t, "d", "et", idx))
@@ -118,7 +123,7 @@ def main():
     if args.out:
         out = Path(args.out)
     elif meth.is_dir():
-        out = meth / f"compare_vs_{na}.md"
+        out = meth / f"compare{'_wave' if args.syl == 'wave' else ''}_vs_{na}.md"
     else:
         out = meth.with_name(f"{meth.stem}.vs_{na}.md")
     out.write_text(text, encoding="utf-8")
