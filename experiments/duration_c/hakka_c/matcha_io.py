@@ -64,8 +64,13 @@ def find_ckpt(exp, which="best"):
     if which == "last":
         return ck / "last.ckpt"
     m = re.fullmatch(r"step(\d+)", which)
-    if m:
-        return ck / f"step_{int(m.group(1)):07d}.ckpt"
+    if m:  # Lightning 存的是 step_0019999 這種(比整數少 1),兩種都找
+        n = int(m.group(1))
+        for k in (n, n - 1, n + 1):
+            p = ck / f"step_{k:07d}.ckpt"
+            if p.exists():
+                return p
+        raise FileNotFoundError(f"{ck} 沒有第 {n} 步的 checkpoint;現有:{sorted(x.name for x in ck.glob('step_*.ckpt'))}")
     return Path(which)
 
 

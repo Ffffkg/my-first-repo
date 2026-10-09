@@ -20,17 +20,15 @@ from hakka_c import config as C  # noqa: E402
 from hakka_c.textgrid import find_tier, read_textgrid  # noqa: E402
 
 
-def find_candidates():
-    roots = [C.HAKKA, Path.home() / "Documents" / "MFA"]
-    dicts, models = [], []
-    for r in roots:
-        if not r.exists():
-            continue
-        for pat in ("*dict*.txt", "*/*dict*.txt", "*/*/*dict*.txt"):
-            dicts += [p for p in r.glob(pat) if "hakka" in p.name.lower() or "mfa" in str(p).lower()]
-        for pat in ("*.zip", "*/*.zip", "*/*/*.zip", "*/*/*/*.zip"):
-            models += [p for p in r.glob(pat) if p.stat().st_size > 1_000_000]
-    return sorted(set(dicts)), sorted(set(models))
+LEXICON = {"sixian": "hakka_lexicon.txt", "hailu": "hailu_lexicon.txt"}
+
+
+def find_mfa(dialect):
+    """你的 TextGrid 是用 `mfa align <corpus> dict/<lexicon> aligned/<腔>/acoustic <out> --single_speaker`
+    產生的(~/Documents/MFA/command_history.yaml),聲學模型是一個資料夾。"""
+    model = C.HAKKA / "aligned" / dialect / "acoustic"
+    lex = C.HAKKA / "dict" / LEXICON[dialect]
+    return (lex if lex.exists() else None), (model if (model / "final.mdl").exists() else None)
 
 
 def main():
@@ -64,12 +62,14 @@ def main():
         n += 1
     print(f"corpus:{out}({n} 個音檔{f',{miss} 個找不到 TextGrid' if miss else ''})")
 
-    dicts, models = find_candidates()
+    lex, model = find_mfa(args.dialect)
     tg_out = ev / "mfa_tg"
-    print("\n找到的詞典候選:", [str(p) for p in dicts][:6] or "(沒找到,請自己指定 build_mfa_dict.py 產生的 hakka_dict.txt)")
-    print("找到的聲學模型候選(.zip):", [str(p) for p in models][:6] or "(沒找到;mfa train 輸出的模型 .zip)")
-    print("\n請在 MFA 的環境執行(詞典與聲學模型要用當初對齊真人錄音的那一套):")
-    print(f"  mfa align {out} <hakka_dict.txt> <客語聲學模型.zip> {tg_out} --clean --beam 100 --retry_beam 400")
+    if not (lex and model):
+        print(f"\n★ 找不到詞典或聲學模型(預期 {C.HAKKA}/dict/{LEXICON[args.dialect]} 與 {C.HAKKA}/aligned/{args.dialect}/acoustic/)")
+    print("\n請在 MFA 的環境執行(與當初對齊真人錄音的設定相同):")
+    print("  conda activate mfa")
+    print(f"  mfa align {out} {lex or '<詞典>'} {model or '<聲學模型資料夾>'} {tg_out} --clean --single_speaker")
+    print("  conda activate tts")
     print(f"\n完成後:python d1_compare.py --eval-dir {ev} --dialect {args.dialect}")
     json.dump({"corpus": str(out), "tg_out": str(tg_out), "n": n}, open(ev / "d1_corpus.json", "w"), indent=2)
 

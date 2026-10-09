@@ -28,7 +28,7 @@ from hakka_c.csvio import read_cols, write_rows  # noqa: E402
 from hakka_c.durations import merge_blank  # noqa: E402
 from hakka_c.stats import fmt  # noqa: E402
 
-GRID = np.round(np.arange(0.50, 1.3001, 0.01), 2)
+GRID = np.round(np.arange(0.30, 1.3001, 0.01), 2)
 
 
 def class_bias(recs, entering, rounding, s):
