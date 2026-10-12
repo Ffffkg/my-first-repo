@@ -265,6 +265,8 @@ python e_analyze.py --key ~/hakka_tts/exp_e/hailu_base_vs_c2/key.csv  --response
 | `d1_compare.py` | D1:波形 vs attn 母音時長、blank 比例、波形版 ET 指標 | 否 |
 | `d1_pipeline.sh` | 一行跑完 合成 → MFA 對齊 → 波形比較 | 是 |
 | `f1_subgroups.py` | F1:依韻尾、調值、停頓前、性別分組的 VBias / VDE / ρ | 否 |
+| `c4_size_setup.py` | C4:由 1h baseline 設定產生其他資料量的設定(只換訓練清單) | 否 |
+| `c4_run.sh` | C4 一鍵:10h(或 SIZE=)baseline vs C2 訓練 + D1 評估 | 是 |
 | `c3_target_check.py` | C3 前置診斷:C2 母音核偏差拆成 訓練目標 / blank 靜音 / 預測器 / 取整 | 是(只跑編碼器) |
 | `c3_fit_pp.py` | C3a:在驗證集估停頓前母音核縮放 s_pp(c_eval / d1_pipeline 用 `--s-pp`) | 否 |
 | `c3_pp_split.py` | C3 診斷:停頓前分「句末 / 句中停頓前」,比較訓練/驗證/測試集的偏差與組成 | 否 |
