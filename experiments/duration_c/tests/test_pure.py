@@ -349,3 +349,27 @@ def test_c3_components():
     assert c["R"] == pytest.approx(0.75 * HOP_MS, abs=1e-3)
     assert c["total"] == pytest.approx(c["A"] + c["B"] + c["R"], abs=1e-2)
     assert c["open"] == 1 and c["blank_r_tgt"] == 4
+
+
+def test_s_pp_scales_only_prepausal_nucleus():
+    from hakka_c.analysis import scaled_w
+    rec = {"w": np.full(9, 4.0), "syllables": [
+        {"nuc": 1, "entering": False, "prepausal": False}, {"nuc": 3, "entering": True, "prepausal": True}]}
+    w = scaled_w(rec, s_et=0.5, s_pp=0.5)
+    assert w[3] == 4.0 and w[7] == 1.0 and w[[0, 1, 2, 4, 5, 6, 8]].tolist() == [4.0] * 7
+
+
+def test_fit_s_pp_recovers_overlength():
+    sys.path.insert(0, str(ROOT))
+    from c3_fit_pp import fit_s_pp, nucleus_errors
+    recs = []
+    for k in range(20):                                   # 停頓前母音核目標 8 frame,預測 10 → s_pp ≈ 0.8
+        d = np.array([1, 3, 1, 6, 1, 3, 1, 8, 1])
+        w = d.astype(float) - 0.5
+        w[7] = 9.5
+        recs.append({"d": d, "w": w, "syllables": [
+            {"nuc": 1, "entering": False, "prepausal": False}, {"nuc": 3, "entering": False, "prepausal": True}]})
+    s = fit_s_pp(recs)
+    assert 0.75 <= s <= 0.84
+    e, _, pp = nucleus_errors(recs, s)
+    assert abs(e[pp].mean()) < 1e-6 and abs(e[~pp].mean()) < 1e-6

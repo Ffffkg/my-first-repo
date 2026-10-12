@@ -12,16 +12,16 @@ from .stats import UttTable, boot_idx, delta_ci, fmt, mean_ci, pearson
 from .structure import base_of
 
 
-def scaled_w(rec, s_et=1.0, s_non=1.0):
-    """只縮放母音核符號本身(不動相鄰 blank 與子音)。"""
+def scaled_w(rec, s_et=1.0, s_non=1.0, s_pp=1.0):
+    """只縮放母音核符號本身(不動相鄰 blank 與子音)。s_pp 另外乘在停頓前音節的母音核上(C3)。"""
     w = np.array(rec["w"], dtype=float)
     for s in rec["syllables"]:
-        w[2 * s["nuc"] + 1] *= s_et if s["entering"] else s_non
+        w[2 * s["nuc"] + 1] *= (s_et if s["entering"] else s_non) * (s_pp if s["prepausal"] else 1.0)
     return w
 
 
-def pred_frames(rec, rounding="ceil", length_scale=1.0, s_et=1.0, s_non=1.0):
-    return matcha_frames(scaled_w(rec, s_et, s_non), length_scale, rounding)
+def pred_frames(rec, rounding="ceil", length_scale=1.0, s_et=1.0, s_non=1.0, s_pp=1.0):
+    return matcha_frames(scaled_w(rec, s_et, s_non, s_pp), length_scale, rounding)
 
 
 def base_row(rec, s):

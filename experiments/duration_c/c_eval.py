@@ -63,6 +63,7 @@ def main():
     ap.add_argument("--length-scale", type=float)
     ap.add_argument("--s-et", type=float)
     ap.add_argument("--s-non", type=float)
+    ap.add_argument("--s-pp", type=float, help="停頓前音節母音核的縮放(c3_fit_pp.py 在驗證集估)")
     ap.add_argument("--data-yaml", help="mel 統計量來源(遷移模型必填)")
     ap.add_argument("--cleaners", default="hakka_cleaners")
     ap.add_argument("--synth", action="store_true", help="合成並計算 MCD,存 wav 與邊界")
@@ -77,8 +78,8 @@ def main():
     ap.add_argument("--name", help="輸出資料夾名稱(預設 <cond>__<variant>)")
     args = ap.parse_args()
 
-    keys = ("rounding", "length_scale", "s_et", "s_non")
-    p = {"rounding": "ceil", "length_scale": 1.0, "s_et": 1.0, "s_non": 1.0}
+    keys = ("rounding", "length_scale", "s_et", "s_non", "s_pp")
+    p = {"rounding": "ceil", "length_scale": 1.0, "s_et": 1.0, "s_non": 1.0, "s_pp": 1.0}
     label = "base"
     if args.calib:
         p.update(json.load(open(args.calib, encoding="utf-8"))[args.variant])

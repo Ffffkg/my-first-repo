@@ -21,6 +21,7 @@ C2 是拿 MFA 轉出的 durations/<stem>.npy 當訓練目標。對每個音節�
 只跑編碼器(不合成),GPU 用量很小。
 """
 import argparse
+import pickle
 import sys
 import time
 from collections import Counter
@@ -122,7 +123,7 @@ def main():
     eng = Engine(ckpt, args.device, (args.cleaners,))
     tg_idx = textgrid_index(args.dialect)
 
-    rows, skipped, t0 = [], Counter(), time.time()
+    rows, recs, skipped, t0 = [], [], Counter(), time.time()
     for j, r in enumerate(rows_in):
         stem = Path(r["wav"]).stem
         dur_dir = Path(args.dur_dir).expanduser() if args.dur_dir else Path(r["wav"]).parent.parent / "durations"
@@ -142,6 +143,7 @@ def main():
         _, _, _, w = eng.encode(x, r["spk"])
         rec = {"dialect": args.dialect, "stem": stem, "spk": r["spk"], "names": names}
         syls = [asdict(s) for s in utt.syllables]
+        recs.append({**rec, "d": d.astype(int), "w": np.asarray(w, float), "syllables": syls})
         for s, comp in zip(syls, syllable_components(d, w, syls)):
             rows.append({**base_row(rec, s), **comp})
         if (j + 1) % 100 == 0:
@@ -149,6 +151,7 @@ def main():
 
     out = C.OUT_ROOT / "c3" / args.name
     write_rows(out / "components.csv", rows)
+    pickle.dump({"ckpt": str(ckpt), "filelist": str(args.filelist), "recs": recs}, open(out / "recs.pkl", "wb"))
     text = (f"# C3 前置診斷:{args.name}\n\ncheckpoint `{ckpt}`,{len({r['stem'] for r in rows})} 句,"
             f"{len(rows)} 個音節。單位 ms;合計、只看母音核、預測−目標附句子層級 bootstrap 95% CI。\n\n"
             + report(rows, args.n_boot)
@@ -158,7 +161,7 @@ def main():
     print("\n" + text)
     if skipped:
         print("\n跳過:", dict(skipped.most_common()))
-    print(f"\n→ {out}/components.csv、report.md")
+    print(f"\n→ {out}/components.csv、report.md、recs.pkl(給 c3_fit_pp.py)")
 
 
 if __name__ == "__main__":
