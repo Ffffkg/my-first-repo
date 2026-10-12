@@ -29,7 +29,8 @@ class UttTable:
         s, c = self.S[(col, mask)], self.C[mask]
         if idx is None:
             return s.sum() / c.sum()
-        return s[idx].sum(axis=-1) / c[idx].sum(axis=-1)
+        with np.errstate(invalid="ignore", divide="ignore"):    # 小組別可能抽到 0 個 → nan,ci() 會略過
+            return s[idx].sum(axis=-1) / c[idx].sum(axis=-1)
 
 
 def boot_idx(U, n_boot=10000, seed=42):
@@ -38,7 +39,7 @@ def boot_idx(U, n_boot=10000, seed=42):
 
 
 def ci(point, draws, alpha=0.05):
-    lo, hi = np.percentile(draws, [100 * alpha / 2, 100 * (1 - alpha / 2)])
+    lo, hi = np.nanpercentile(draws, [100 * alpha / 2, 100 * (1 - alpha / 2)])
     return float(point), float(lo), float(hi)
 
 

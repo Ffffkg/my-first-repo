@@ -230,6 +230,7 @@ python e_analyze.py --key ~/hakka_tts/exp_e/<名稱>/key.csv --responses <放回
 | `f1_subgroups.py` | F1:依韻尾、調值、停頓前、性別分組的 VBias / VDE / ρ | 否 |
 | `c3_target_check.py` | C3 前置診斷:C2 母音核偏差拆成 訓練目標 / blank 靜音 / 預測器 / 取整 | 是(只跑編碼器) |
 | `c3_fit_pp.py` | C3a:在驗證集估停頓前母音核縮放 s_pp(c_eval / d1_pipeline 用 `--s-pp`) | 否 |
+| `c3_pp_split.py` | C3 診斷:停頓前分「句末 / 句中停頓前」,比較訓練/驗證/測試集的偏差與組成 | 否 |
 | `e_build_ab.py` | E2:產生成對比較聽測(HTML + 音檔,響度正規化,含注意力檢查題) | 否 |
 | `e_analyze.py` | E2:CMOS 與偏好比例,聽者×句子交叉重抽 CI,注意力檢查排除 | 否 |
 | `hakka_c/` | 共用模組(路徑常數、TextGrid、符號對應、時長換算、統計、Matcha 介面) | — |
