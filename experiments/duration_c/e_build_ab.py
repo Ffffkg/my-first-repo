@@ -15,6 +15,7 @@
   * 句子:兩系統都有合成的測試句中,優先挑入聲 ≥ 2 個的句子,種子 20260716 抽 n 句;生成種子固定 1234。
   * 每題左右順序隨機;另外加入 n_identical 題「兩邊完全相同」的檢查題(期望回答 0),用來檢查聽者是否專心。
   * 響度:兩邊都正規化到相同 RMS(−23 dBFS),並限制峰值,避免「比較大聲就比較好」。
+  * 聽者資料:會說的腔調可複選(四縣 / 海陸 / 其他),CSV 的 dialect 欄記成「四縣+海陸」這種形式。
   * 作答:7 點 CMOS,−3(1 好很多)… 0(一樣)… +3(2 好很多),外加「入聲字聽起來哪邊比較自然」的同一量表。
 """
 import argparse
@@ -55,8 +56,11 @@ button.primary{background:#1f5fbf;color:#fff;border-color:#1f5fbf}#prog{color:#6
 <p>每一題有兩段<b>同一句話</b>的合成語音(1 與 2)。請戴耳機,在安靜的地方作答,每段可以重複聽。</p>
 <p>請依兩個問題作答:<b>(一)整體哪一段比較自然</b>;<b>(二)句中的入聲字(-b/-d/-g 結尾的字)哪一段唸得比較自然、長短比較對</b>。分不出來就選 0。</p>
 <div class="row"><span>你的代號(不用真名):</span><input id="lid" placeholder="例如 L01"></div>
-<p class="row"><span>母語腔調:</span><select id="dia"><option>四縣</option><option>海陸</option><option>其他</option></select>
-<span>使用頻率:</span><select id="freq"><option>每天</option><option>每週</option><option>偶爾</option><option>很少</option></select></p>
+<p class="row"><span>會說的腔調(可複選):</span>
+<label><input type="checkbox" name="dia" value="四縣">四縣</label>
+<label><input type="checkbox" name="dia" value="海陸">海陸</label>
+<label><input type="checkbox" name="dia" value="其他">其他</label><input id="dia_other" placeholder="其他腔調,例如大埔" size="12"></p>
+<p class="row"><span>客語使用頻率:</span><select id="freq"><option>每天</option><option>每週</option><option>偶爾</option><option>很少</option></select></p>
 <button class="primary" onclick="start()">開始</button></div>
 <div id="test" style="display:none"><div id="prog"></div><div class="card" id="trial"></div>
 <div class="row"><button class="primary" onclick="next()">下一題</button></div></div>
@@ -71,13 +75,16 @@ function show(){const t=TRIALS[i];document.getElementById('prog').textContent=`�
 document.getElementById('trial').innerHTML=`<div class="row"><span class="lab">1</span><audio controls preload="auto" src="stimuli/${t.id}_1.wav"></audio></div>
 <div class="row"><span class="lab">2</span><audio controls preload="auto" src="stimuli/${t.id}_2.wav"></audio></div>
 <p>(一)整體哪一段比較自然?</p>${scale('q1')}<p>(二)入聲字哪一段比較自然?</p>${scale('q2')}`;t0=Date.now()}
+function dialects(){return [...document.querySelectorAll('input[name=dia]:checked')].map(e=>e.value==='其他'?
+'其他:'+(document.getElementById('dia_other').value.trim()||'未填'):e.value).join('+').replace(/[,"\\n\\r]/g,' ')}
 function start(){if(!document.getElementById('lid').value.trim()){alert('請先填代號');return}
+if(!dialects()){alert('請勾選會說的腔調(可複選)');return}
 document.getElementById('intro').style.display='none';document.getElementById('test').style.display='block';show()}
 function val(n){const e=document.querySelector(`input[name=${n}]:checked`);return e?e.value:null}
 function next(){const a=val('q1'),b=val('q2');if(a===null||b===null){alert('兩題都要作答');return}
 ans.push({trial:TRIALS[i].id,q1:a,q2:b,sec:((Date.now()-t0)/1000).toFixed(1)});i++;
 if(i<TRIALS.length)show();else{document.getElementById('test').style.display='none';document.getElementById('done').style.display='block'}}
-function download(){const id=document.getElementById('lid').value.trim(),d=document.getElementById('dia').value,f=document.getElementById('freq').value;
+function download(){const id=document.getElementById('lid').value.trim().replace(/[,"]/g,' '),d=dialects(),f=document.getElementById('freq').value;
 let s='listener,dialect,frequency,trial,q1,q2,seconds\\n';for(const r of ans)s+=`${id},${d},${f},${r.trial},${r.q1},${r.q2},${r.sec}\\n`;
 const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\\ufeff'+s],{type:'text/csv'}));a.download=`listening_${id}.csv`;a.click()}
 </script></body></html>

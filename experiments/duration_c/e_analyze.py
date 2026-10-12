@@ -1,6 +1,6 @@
 """實驗 E2 分析:成對比較聽測(e_build_ab.py 產生的測驗)。
 
-    python e_analyze.py --key ~/hakka_tts/exp_e/sixian_base_vs_c2/key.csv --responses ~/hakka_tts/exp_e/sixian_base_vs_c2/responses
+    python e_analyze.py --key ~/hakka_tts/exp_e/sixian_base_vs_c2/key.csv --responses ~/hakka_tts/exp_e/responses_sixian --dialect 四縣
 
 分數方向:轉成「B − A」,正值代表系統 B(通常是新方法)比較好。
   q1 = 整體自然度,q2 = 入聲字自然度,範圍 −3 … +3。
@@ -51,6 +51,7 @@ def main():
     ap.add_argument("--key", required=True)
     ap.add_argument("--responses", required=True, help="放聽者 CSV 的資料夾(listening_*.csv)")
     ap.add_argument("--same-threshold", type=float, default=2.0)
+    ap.add_argument("--dialect", help="只保留會說這個腔調的聽者(例如 四縣;聽者可複選,含此腔調即保留)")
     ap.add_argument("--n-boot", type=int, default=5000)
     args = ap.parse_args()
 
@@ -80,10 +81,12 @@ def main():
         m1 = np.mean([s[1] for s in same]) if same else float("nan")
         m2 = np.mean([s[2] for s in same]) if same else float("nan")
         ok = not same or (m1 < args.same_threshold and m2 < args.same_threshold)
-        keep += [lid] if ok else []
-        L.append(f"| {lid} | {meta[lid][0]} | {meta[lid][1]} | {m1:.2f} | {m2:.2f} | {'保留' if ok else '★排除'} |")
+        dia_ok = not args.dialect or args.dialect in meta[lid][0].split("+")
+        keep += [lid] if ok and dia_ok else []
+        why = "保留" if ok and dia_ok else ("★排除(注意力)" if not ok else f"排除(不會說{args.dialect})")
+        L.append(f"| {lid} | {meta[lid][0]} | {meta[lid][1]} | {m1:.2f} | {m2:.2f} | {why} |")
     if not keep:
-        sys.exit("\n".join(L) + "\n\n★ 所有聽者都沒通過注意力檢查")
+        sys.exit("\n".join(L) + "\n\n★ 沒有符合條件的聽者(注意力檢查或 --dialect 篩選)")
 
     trials = sorted(t for t, k in key.items() if k["kind"] != "same")
     L += ["", f"## 結果(保留 {len(keep)} 位聽者 × {len(trials)} 題)\n",
