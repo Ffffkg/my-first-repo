@@ -268,6 +268,10 @@ python e_analyze.py --key ~/hakka_tts/exp_e/hailu_base_vs_c2/key.csv  --response
 | `c3_target_check.py` | C3 前置診斷:C2 母音核偏差拆成 訓練目標 / blank 靜音 / 預測器 / 取整 | 是(只跑編碼器) |
 | `c3_fit_pp.py` | C3a:在驗證集估停頓前母音核縮放 s_pp(c_eval / d1_pipeline 用 `--s-pp`) | 否 |
 | `c3_pp_split.py` | C3 診斷:停頓前分「句末 / 句中停頓前」,比較訓練/驗證/測試集的偏差與組成 | 否 |
+| `g1_tone_feats.py` | G1:音節母音核 5 點 F0 特徵(真人錄音或合成語音,沿用 D1 的 MFA 對齊) | 否 |
+| `g1_tone_eval.py` | G1:客觀聲調辨識率(真人訓練的分類器辨識合成語音;手冊 tone_error_rate 的實作版) | 否 |
+| `g1_run.sh` | G1 一鍵:特徵 → baseline vs C2 三種子聲調辨識率 | 否 |
+| `g2_qusheng.py` | G2:去聲方向不對稱的音節層級檢驗(F0 誤差的方向效應、海陸 11↔33 混淆) | 否 |
 | `e_build_ab.py` | E2:產生線上成對比較聽測(長輩友善手機頁面 + 音檔,響度正規化,含注意力檢查題) | 否 |
 | `e_ab_template.html` | E2 聽測頁面範本(e_build_ab.py 讀取) | — |
 | `e_collect.gs` | E2:Google Apps Script,把作答自動收進 Google 試算表 | — |

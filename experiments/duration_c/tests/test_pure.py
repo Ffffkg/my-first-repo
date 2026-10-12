@@ -373,3 +373,44 @@ def test_fit_s_pp_recovers_overlength():
     assert 0.75 <= s <= 0.84
     e, _, pp = nucleus_errors(recs, s)
     assert abs(e[pp].mean()) < 1e-6 and abs(e[~pp].mean()) < 1e-6
+
+
+def test_f0_nucleus_points_on_glide(tmp_path):
+    from hakka_c.f0feat import f0_track, nucleus_points
+    sr = 22050
+    t = np.arange(int(sr * 1.0)) / sr
+    f = np.where(t < 0.5, 150.0, 150.0 + 100.0 * (t - 0.5) / 0.5)      # 前半平、後半上升到 250 Hz
+    x = 0.3 * np.sin(2 * np.pi * np.cumsum(f) / sr)
+    f0, tt = f0_track(x, sr)
+    flat, vf = nucleus_points(f0, tt, 0.1, 0.4)
+    rise, _ = nucleus_points(f0, tt, 0.55, 0.95)
+    assert vf > 0.9 and all(abs(2 ** p - 150) < 5 for p in flat)
+    assert rise[0] < rise[-1] and abs(2 ** rise[-1] - 240) < 10
+
+
+def test_g1_synth_features(tmp_path):
+    """假的 eval 資料夾:bounds + 合成 TextGrid + 音檔,檢查母音核 F0 取對位置。"""
+    import json as _json
+    import soundfile as sf
+    from dataclasses import asdict
+    ev = tmp_path / "ev"
+    for d in ("wav", "bounds", "mfa_tg/XF"):
+        (ev / d).mkdir(parents=True)
+    (ev / "mfa_tg/XF/XF-1_g1234.TextGrid").write_text(LONG_TG, encoding="utf-8")
+    names = ["s", "ii@5", "d", "d", "o@24", "ng"]
+    tg = tmp_path / "a.TextGrid"
+    tg.write_text(LONG_TG, encoding="utf-8")
+    u = build_utt("XF-1", names, read_textgrid(tg))
+    _json.dump({"names": names, "syllables": [asdict(s) for s in u.syllables]},
+               open(ev / "bounds/XF-1.json", "w"), ensure_ascii=False)
+    sr = 22050
+    t = np.arange(sr) / sr
+    f = np.where(t < 0.45, 120.0, 220.0)                               # ii(0.20–0.28)=120 Hz、o(0.50–0.65)=220 Hz
+    sf.write(ev / "wav/XF-1_g1234.wav", 0.3 * np.sin(2 * np.pi * np.cumsum(f) / sr), sr)
+    out = tmp_path / "f.csv"
+    subprocess.run([sys.executable, str(ROOT / "g1_tone_feats.py"), "synth", "--dialect", "sixian",
+                    "--eval-dir", str(ev), "--out", str(out)], check=True, capture_output=True)
+    c = read_cols(out)
+    assert c["word"].tolist() == ["siid5", "dong24"] and c["gen_seed"].tolist() == [1234, 1234]
+    assert abs(2 ** c["p3"][0] - 120) < 6 and abs(2 ** c["p3"][1] - 220) < 8
+    assert abs(c["dur_ms"][0] - 80) < 0.1 and c["entering"].tolist() == [1, 0]
