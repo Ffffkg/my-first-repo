@@ -2,6 +2,9 @@
 
     python e_analyze.py --key ~/hakka_tts/exp_e/sixian_base_vs_c2/key.csv --responses ~/hakka_tts/exp_e/responses_sixian --dialect 四縣
 
+回應可以是聽者自己下載的 CSV,也可以是 Google 試算表(e_collect.gs)該份聽測工作表下載的 CSV
+(多位聽者在同一個檔;同一位聽者同一題出現多次時以最後一次為準)。
+
 分數方向:轉成「B − A」,正值代表系統 B(通常是新方法)比較好。
   q1 = 整體自然度,q2 = 入聲字自然度,範圍 −3 … +3。
 
@@ -51,6 +54,7 @@ def main():
     ap.add_argument("--key", required=True)
     ap.add_argument("--responses", required=True, help="放聽者 CSV 的資料夾(listening_*.csv)")
     ap.add_argument("--same-threshold", type=float, default=2.0)
+    ap.add_argument("--min-done", type=float, default=0.8, help="作答題數少於全部的這個比例的聽者排除(沒做完)")
     ap.add_argument("--dialect", help="只保留會說這個腔調的聽者(例如 四縣;聽者可複選,含此腔調即保留)")
     ap.add_argument("--n-boot", type=int, default=5000)
     args = ap.parse_args()
@@ -64,9 +68,11 @@ def main():
     for f in files:
         for r in read_csv(f):
             lid = r["listener"].strip() or f.stem
-            meta[lid] = (r.get("dialect", ""), r.get("frequency", ""))
+            if r["trial"] not in key:
+                continue
+            meta[lid] = (r.get("dialect", ""), r.get("frequency", ""), (r.get("name") or "").strip())
             k = key[r["trial"]]
-            q1, q2 = int(r["q1"]), int(r["q2"])
+            q1, q2 = int(float(r["q1"])), int(float(r["q2"]))
             if k["kind"] == "same":
                 resp[lid][r["trial"]] = ("same", abs(q1), abs(q2))
             else:
@@ -74,7 +80,8 @@ def main():
                 resp[lid][r["trial"]] = ("ab", sgn * q1, sgn * q2)
 
     L = ["# E2 成對比較聽測結果\n", f"回收 {len(resp)} 位聽者。分數 = B − A(正值:B 較好),範圍 −3…+3。\n",
-         "## 注意力檢查(兩邊相同的題目)\n", "| 聽者 | 腔調 | 使用頻率 | 相同題平均 |q1| | 相同題平均 |q2| | 結果 |", "|---|---|---|---|---|---|"]
+         "## 注意力檢查(兩邊相同的題目)\n", "| 聽者 | 稱呼 | 腔調 | 使用頻率 | 作答題數 | 相同題平均 |q1| | 相同題平均 |q2| | 結果 |",
+         "|---|---|---|---|---|---|---|---|"]
     keep = []
     for lid in sorted(resp):
         same = [v for v in resp[lid].values() if v[0] == "same"]
@@ -82,9 +89,12 @@ def main():
         m2 = np.mean([s[2] for s in same]) if same else float("nan")
         ok = not same or (m1 < args.same_threshold and m2 < args.same_threshold)
         dia_ok = not args.dialect or args.dialect in meta[lid][0].split("+")
-        keep += [lid] if ok and dia_ok else []
-        why = "保留" if ok and dia_ok else ("★排除(注意力)" if not ok else f"排除(不會說{args.dialect})")
-        L.append(f"| {lid} | {meta[lid][0]} | {meta[lid][1]} | {m1:.2f} | {m2:.2f} | {why} |")
+        n_done = len(resp[lid])
+        done_ok = n_done >= args.min_done * len(key)
+        keep += [lid] if ok and dia_ok and done_ok else []
+        why = ("保留" if ok and dia_ok and done_ok else "排除(沒做完)" if not done_ok
+               else "★排除(注意力)" if not ok else f"排除(不會說{args.dialect})")
+        L.append(f"| {lid} | {meta[lid][2]} | {meta[lid][0]} | {meta[lid][1]} | {n_done}/{len(key)} | {m1:.2f} | {m2:.2f} | {why} |")
     if not keep:
         sys.exit("\n".join(L) + "\n\n★ 沒有符合條件的聽者(注意力檢查或 --dialect 篩選)")
 

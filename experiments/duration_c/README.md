@@ -201,11 +201,47 @@ python f1_subgroups.py <系統1>/syllables_wave.csv <系統2>/syllables_wave.csv
 # 換訓練種子(不用新 config:Hydra 覆寫 seed 與 run_name,輸出資料夾跟著 run_name)
 cd ~/Matcha-TTS && python matcha/train.py experiment=c2_mfadur_fair1h_joint_sixian_scratch_s1234 seed=123 run_name=c2_mfadur_fair1h_joint_sixian_scratch_s123
 
-# 實驗 E2:成對比較聽測
-python e_build_ab.py --a <系統A 的 eval 資料夾> --b <系統B 的 eval 資料夾> --n 30 --out ~/hakka_tts/exp_e/<名稱>
-#   把 <out>/listening_test/ 整個資料夾交給聽者(瀏覽器開 index.html,作答完下載 CSV 回傳);key.csv 自己保留
-python e_analyze.py --key ~/hakka_tts/exp_e/<名稱>/key.csv --responses <放回傳 CSV 的資料夾>
 ```
+
+## 5c. 實驗 E2:線上聽測(傳一個連結,長輩用手機點開就能做)
+
+聽者只要在 LINE 點連結:大字、大按鈕,兩段都聽完才能作答,中途離開會自動接續,
+每答一題就自動存進你的 Google 試算表,聽者不用下載或回傳任何檔案。
+
+**(1) 一次性設定:Google 試算表回收(約 5 分鐘)**
+
+1. 開一個新的 Google 試算表,例如命名「客語聽測回收」。
+2. 選單「擴充功能」→「Apps Script」,把 `e_collect.gs` 的全部內容貼上(取代原本的),按「儲存」。
+3. 右上「部署」→「新增部署作業」→ 齒輪選「網頁應用程式」;執行身分「我」、誰可以存取「所有人」→「部署」。
+   授權時若出現「Google 尚未驗證這個應用程式」:按「進階」→「前往(不安全)」→「允許」(這是你自己的程式)。
+4. 複製「網頁應用程式網址」(`https://script.google.com/macros/s/…/exec`)。
+
+**(2) 產生聽測頁面**
+
+```bash
+URL=https://script.google.com/macros/s/……/exec          # 換成上面複製的網址
+E=~/hakka_tts/exp_c/eval
+python e_build_ab.py --a $E/base_sixian_step40000 --b $E/c2_sixian_step40000 --n 30 --out ~/hakka_tts/exp_e/sixian_base_vs_c2 --submit-url $URL
+python e_build_ab.py --a $E/base_hailu_step40000  --b $E/c2_hailu_step40000  --n 30 --out ~/hakka_tts/exp_e/hailu_base_vs_c2  --submit-url $URL
+```
+
+**(3) 放到網路上,拿到連結**:任何靜態網頁空間都可以,最簡單的是 Netlify Drop:
+用瀏覽器開 https://app.netlify.com/drop(用 Google 帳號免費登入),把 `~/hakka_tts/exp_e/sixian_base_vs_c2/listening_test`
+整個資料夾拖進去,幾秒後會得到 `https://xxxx.netlify.app` 的網址;海陸的資料夾再拖一次,得到第二個網址。
+只上傳 `listening_test/`,**不要上傳 `key.csv`**(答案對照)。合成音檔會變成知道網址的人都聽得到,上傳前請確認語料授權允許。
+
+**(4) 先自己試一次**:把網址用 LINE 傳給自己,在 LINE 裡點開做完一輪,確認試算表出現同名工作表(例如 `sixian_base_vs_c2`)和資料列;
+測完把那幾列刪掉,或記下自己的聽者編號之後排除。
+
+**(5) 分析**:在試算表切到該份聽測的工作表 →「檔案」→「下載」→「逗號分隔值(.csv)」,放進一個資料夾:
+
+```bash
+python e_analyze.py --key ~/hakka_tts/exp_e/sixian_base_vs_c2/key.csv --responses <放 CSV 的資料夾> --dialect 四縣
+python e_analyze.py --key ~/hakka_tts/exp_e/hailu_base_vs_c2/key.csv  --responses <放 CSV 的資料夾> --dialect 海陸
+```
+
+沒做完(少於 80% 題目,`--min-done` 可調)、沒通過注意力檢查、或不會說該腔調的聽者會自動排除並列在報告裡。
+不給 `--submit-url` 時,頁面最後會改成讓聽者用 LINE 分享 / 下載 / 複製結果。
 
 ## 6. C3
 
@@ -231,7 +267,9 @@ python e_analyze.py --key ~/hakka_tts/exp_e/<名稱>/key.csv --responses <放回
 | `c3_target_check.py` | C3 前置診斷:C2 母音核偏差拆成 訓練目標 / blank 靜音 / 預測器 / 取整 | 是(只跑編碼器) |
 | `c3_fit_pp.py` | C3a:在驗證集估停頓前母音核縮放 s_pp(c_eval / d1_pipeline 用 `--s-pp`) | 否 |
 | `c3_pp_split.py` | C3 診斷:停頓前分「句末 / 句中停頓前」,比較訓練/驗證/測試集的偏差與組成 | 否 |
-| `e_build_ab.py` | E2:產生成對比較聽測(HTML + 音檔,響度正規化,含注意力檢查題) | 否 |
+| `e_build_ab.py` | E2:產生線上成對比較聽測(長輩友善手機頁面 + 音檔,響度正規化,含注意力檢查題) | 否 |
+| `e_ab_template.html` | E2 聽測頁面範本(e_build_ab.py 讀取) | — |
+| `e_collect.gs` | E2:Google Apps Script,把作答自動收進 Google 試算表 | — |
 | `e_analyze.py` | E2:CMOS 與偏好比例,聽者×句子交叉重抽 CI,注意力檢查排除 | 否 |
 | `hakka_c/` | 共用模組(路徑常數、TextGrid、符號對應、時長換算、統計、Matcha 介面) | — |
 | `tests/` | 單元測試:`python -m pytest tests -q`(不需 GPU) | 否 |
