@@ -45,48 +45,92 @@ HTML = """<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8">
 <style>
 body{font-family:system-ui,-apple-system,"Noto Sans TC",sans-serif;max-width:760px;margin:0 auto;padding:16px;line-height:1.6;background:#fafafa;color:#222}
 .card{background:#fff;border:1px solid #ddd;border-radius:10px;padding:16px;margin:14px 0}
-.row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}.lab{min-width:3.5em;font-weight:600}
-.scale{display:flex;justify-content:space-between;gap:4px;margin:6px 0 2px}.scale label{flex:1;text-align:center;font-size:14px}
-.scale input{display:block;margin:0 auto 2px}.hint{display:flex;justify-content:space-between;font-size:13px;color:#666}
-button{font-size:16px;padding:8px 18px;border-radius:8px;border:1px solid #888;background:#fff;cursor:pointer}
+.row{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin:8px 0}.lab{min-width:2em;font-weight:600}
+.scale{display:flex;justify-content:space-between;gap:2px;margin:6px 0 2px}.scale label{flex:1;text-align:center;font-size:14px;padding:4px 0}
+.scale input{display:block;margin:0 auto 2px;width:22px;height:22px}.hint{display:flex;justify-content:space-between;font-size:13px;color:#666}
+input[type=checkbox]{width:20px;height:20px;vertical-align:middle}input[type=text]{font-size:16px;padding:4px 6px}select{font-size:16px}
+audio{width:100%;max-width:420px}.err{color:#c62828;font-weight:600;min-height:1.4em}
+button{font-size:17px;padding:10px 20px;border-radius:8px;border:1px solid #888;background:#fff;cursor:pointer;touch-action:manipulation}
 button.primary{background:#1f5fbf;color:#fff;border-color:#1f5fbf}#prog{color:#666}
+textarea{width:100%;height:9em;font-size:12px}
 </style></head><body>
 <h2>客語合成語音聽測</h2>
+<div class="card err" id="nojs">如果按「開始」沒有反應:請改用 Chrome 或 Safari 開啟這個網頁,不要在 LINE、檔案預覽或雲端硬碟的預覽畫面裡開。</div>
+<div class="card" id="resume" style="display:none"><p>偵測到上次沒做完的進度。</p>
+<div class="row"><button class="primary" id="btn_resume" type="button">繼續上次進度</button><button id="btn_restart" type="button">重新開始</button></div></div>
 <div class="card" id="intro">
 <p>每一題有兩段<b>同一句話</b>的合成語音(1 與 2)。請戴耳機,在安靜的地方作答,每段可以重複聽。</p>
 <p>請依兩個問題作答:<b>(一)整體哪一段比較自然</b>;<b>(二)句中的入聲字(-b/-d/-g 結尾的字)哪一段唸得比較自然、長短比較對</b>。分不出來就選 0。</p>
-<div class="row"><span>你的代號(不用真名):</span><input id="lid" placeholder="例如 L01"></div>
-<p class="row"><span>會說的腔調(可複選):</span>
-<label><input type="checkbox" name="dia" value="四縣">四縣</label>
-<label><input type="checkbox" name="dia" value="海陸">海陸</label>
-<label><input type="checkbox" name="dia" value="其他">其他</label><input id="dia_other" placeholder="其他腔調,例如大埔" size="12"></p>
-<p class="row"><span>客語使用頻率:</span><select id="freq"><option>每天</option><option>每週</option><option>偶爾</option><option>很少</option></select></p>
-<button class="primary" onclick="start()">開始</button></div>
+<div class="row"><span>你的代號(不用真名):</span><input type="text" id="lid" placeholder="例如 L01" size="10"></div>
+<div class="row"><span>會說的腔調(可複選):</span>
+<label><input type="checkbox" name="dia" value="四縣"> 四縣</label>
+<label><input type="checkbox" name="dia" value="海陸"> 海陸</label>
+<label><input type="checkbox" name="dia" value="其他"> 其他</label><input type="text" id="dia_other" placeholder="其他腔調,例如大埔" size="12"></div>
+<div class="row"><span>客語使用頻率:</span><select id="freq"><option>每天</option><option>每週</option><option>偶爾</option><option>很少</option></select></div>
+<div class="err" id="msg_intro"></div>
+<button class="primary" id="btn_start" type="button">開始</button></div>
 <div id="test" style="display:none"><div id="prog"></div><div class="card" id="trial"></div>
-<div class="row"><button class="primary" onclick="next()">下一題</button></div></div>
-<div class="card" id="done" style="display:none"><p>完成了,謝謝!請按下面按鈕下載結果檔,並把檔案回傳。</p>
-<button class="primary" onclick="download()">下載結果 CSV</button></div>
+<div class="err" id="msg_trial"></div>
+<div class="row"><button class="primary" id="btn_next" type="button">下一題</button></div></div>
+<div class="card" id="done" style="display:none"><p>完成了,謝謝!請把結果傳給研究者,下面三種方式選一種就好:</p>
+<div class="row"><button class="primary" id="btn_share" type="button">分享結果(手機:用 LINE / Email 傳)</button></div>
+<div class="row"><button id="btn_download" type="button">下載結果 CSV</button><button id="btn_copy" type="button">複製結果文字</button></div>
+<div class="err" id="msg_done"></div>
+<p style="font-size:14px;color:#666">如果上面都不行,請長按下面的文字全選、複製,貼到 LINE 或 Email 傳給研究者。</p>
+<textarea id="csv" readonly></textarea></div>
 <script>
-const TRIALS = __TRIALS__;
-let i = 0, t0 = 0; const ans = [];
-function scale(name){let h='<div class="scale">';for(let v=-3;v<=3;v++){h+=`<label><input type="radio" name="${name}" value="${v}">${v>0?'+'+v:v}</label>`}
-return h+'</div><div class="hint"><span>1 好很多</span><span>一樣</span><span>2 好很多</span></div>'}
-function show(){const t=TRIALS[i];document.getElementById('prog').textContent=`第 ${i+1} / ${TRIALS.length} 題`;
-document.getElementById('trial').innerHTML=`<div class="row"><span class="lab">1</span><audio controls preload="auto" src="stimuli/${t.id}_1.wav"></audio></div>
-<div class="row"><span class="lab">2</span><audio controls preload="auto" src="stimuli/${t.id}_2.wav"></audio></div>
-<p>(一)整體哪一段比較自然?</p>${scale('q1')}<p>(二)入聲字哪一段比較自然?</p>${scale('q2')}`;t0=Date.now()}
-function dialects(){return [...document.querySelectorAll('input[name=dia]:checked')].map(e=>e.value==='其他'?
-'其他:'+(document.getElementById('dia_other').value.trim()||'未填'):e.value).join('+').replace(/[,"\\n\\r]/g,' ')}
-function start(){if(!document.getElementById('lid').value.trim()){alert('請先填代號');return}
-if(!dialects()){alert('請勾選會說的腔調(可複選)');return}
-document.getElementById('intro').style.display='none';document.getElementById('test').style.display='block';show()}
-function val(n){const e=document.querySelector(`input[name=${n}]:checked`);return e?e.value:null}
-function next(){const a=val('q1'),b=val('q2');if(a===null||b===null){alert('兩題都要作答');return}
-ans.push({trial:TRIALS[i].id,q1:a,q2:b,sec:((Date.now()-t0)/1000).toFixed(1)});i++;
-if(i<TRIALS.length)show();else{document.getElementById('test').style.display='none';document.getElementById('done').style.display='block'}}
-function download(){const id=document.getElementById('lid').value.trim().replace(/[,"]/g,' '),d=dialects(),f=document.getElementById('freq').value;
-let s='listener,dialect,frequency,trial,q1,q2,seconds\\n';for(const r of ans)s+=`${id},${d},${f},${r.trial},${r.q1},${r.q2},${r.sec}\\n`;
-const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\\ufeff'+s],{type:'text/csv'}));a.download=`listening_${id}.csv`;a.click()}
+var TRIALS = __TRIALS__, KEY = 'hakka_ab___TESTID__';
+var i = 0, t0 = 0, ans = [];
+function $(id){return document.getElementById(id)}
+function say(id, t){$(id).textContent = t}
+function save(){try{localStorage.setItem(KEY, JSON.stringify({lid:$('lid').value, dia:dialects(), other:$('dia_other').value,
+  freq:$('freq').value, i:i, ans:ans}))}catch(e){}}
+function load(){try{return JSON.parse(localStorage.getItem(KEY) || 'null')}catch(e){return null}}
+function clean(s){return String(s).replace(/[,"\\r\\n]/g, ' ').trim()}
+function scale(name){var h='<div class="scale">';for(var v=-3;v<=3;v++){h+='<label><input type="radio" name="'+name+'" value="'+v+'">'+(v>0?'+'+v:v)+'</label>'}
+  return h+'</div><div class="hint"><span>1 好很多</span><span>一樣</span><span>2 好很多</span></div>'}
+function show(){var t=TRIALS[i];say('prog','第 '+(i+1)+' / '+TRIALS.length+' 題');say('msg_trial','');
+  $('trial').innerHTML='<div class="row"><span class="lab">1</span><audio controls preload="auto" src="stimuli/'+t.id+'_1.wav"></audio></div>'+
+  '<div class="row"><span class="lab">2</span><audio controls preload="auto" src="stimuli/'+t.id+'_2.wav"></audio></div>'+
+  '<p>(一)整體哪一段比較自然?</p>'+scale('q1')+'<p>(二)入聲字哪一段比較自然?</p>'+scale('q2');
+  var au=$('trial').querySelectorAll('audio');for(var k=0;k<au.length;k++){au[k].addEventListener('error',function(){
+    say('msg_trial','音檔載入失敗:請確認 stimuli 資料夾和 index.html 放在一起(整個資料夾解壓縮後再開)。')})}
+  window.scrollTo(0,0);t0=Date.now()}
+function dialects(){var out=[],c=document.querySelectorAll('input[name=dia]:checked');
+  for(var k=0;k<c.length;k++){out.push(c[k].value==='其他'?'其他:'+(clean($('dia_other').value)||'未填'):c[k].value)}return out.join('+')}
+function begin(){$('intro').style.display='none';$('resume').style.display='none';$('test').style.display='block';
+  if(i<TRIALS.length)show();else finish()}
+function start(){if(!clean($('lid').value)){say('msg_intro','請先填代號');return}
+  if(!dialects()){say('msg_intro','請勾選會說的腔調(可複選)');return}
+  i=0;ans=[];save();begin()}
+function val(n){var e=document.querySelector('input[name='+n+']:checked');return e?e.value:null}
+function next(){var a=val('q1'),b=val('q2');if(a===null||b===null){say('msg_trial','兩題都要作答');return}
+  ans.push({trial:TRIALS[i].id,q1:a,q2:b,sec:((Date.now()-t0)/1000).toFixed(1)});i++;save();
+  if(i<TRIALS.length)show();else finish()}
+function csv(){var id=clean($('lid').value),d=dialects(),f=$('freq').value,s='listener,dialect,frequency,trial,q1,q2,seconds\\n';
+  for(var k=0;k<ans.length;k++){var r=ans[k];s+=[id,d,f,r.trial,r.q1,r.q2,r.sec].join(',')+'\\n'}return s}
+function fname(){return 'listening_'+(clean($('lid').value).replace(/\\s+/g,'_')||'listener')+'.csv'}
+function finish(){$('test').style.display='none';$('done').style.display='block';$('csv').value=csv();window.scrollTo(0,0)}
+function download(){var a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\\ufeff'+csv()],{type:'text/csv'}));
+  a.download=fname();document.body.appendChild(a);a.click();a.remove()}
+function share(){try{var file=new File(['\\ufeff'+csv()],fname(),{type:'text/csv'});
+  if(navigator.canShare&&navigator.canShare({files:[file]})){navigator.share({files:[file],title:fname()}).catch(function(){});return}
+  if(navigator.share){navigator.share({title:fname(),text:csv()}).catch(function(){});return}}catch(e){}
+  say('msg_done','這個瀏覽器不支援分享,請改用「下載」或「複製」。')}
+function copy(){var t=$('csv');t.focus();t.select();var ok=false;try{ok=document.execCommand('copy')}catch(e){}
+  if(navigator.clipboard){navigator.clipboard.writeText(t.value).then(function(){say('msg_done','已複製,請貼到 LINE 或 Email。')},
+    function(){say('msg_done',ok?'已複製,請貼到 LINE 或 Email。':'無法自動複製,請長按文字框全選複製。')})}
+  else say('msg_done',ok?'已複製,請貼到 LINE 或 Email。':'無法自動複製,請長按文字框全選複製。')}
+$('nojs').style.display='none';
+$('btn_start').addEventListener('click',start);$('btn_next').addEventListener('click',next);
+$('btn_download').addEventListener('click',download);$('btn_share').addEventListener('click',share);$('btn_copy').addEventListener('click',copy);
+var prev=load();
+if(prev&&prev.ans&&prev.ans.length){$('resume').style.display='block';
+  $('btn_resume').addEventListener('click',function(){$('lid').value=prev.lid||'';$('dia_other').value=prev.other||'';$('freq').value=prev.freq||'每天';
+    var parts=(prev.dia||'').split('+');var c=document.querySelectorAll('input[name=dia]');
+    for(var k=0;k<c.length;k++){for(var m=0;m<parts.length;m++){if(parts[m]===c[k].value||(c[k].value==='其他'&&parts[m].indexOf('其他')===0))c[k].checked=true}}
+    ans=prev.ans;i=prev.i;begin()});
+  $('btn_restart').addEventListener('click',function(){try{localStorage.removeItem(KEY)}catch(e){}$('resume').style.display='none'})}
 </script></body></html>
 """
 
@@ -143,7 +187,8 @@ def main():
         key.append({"trial": tid, "stem": stem, "kind": kind, "pos1": sys1, "pos2": sys2,
                     "n_entering": n_et(stem)})
         trials.append({"id": tid})
-    (out / "listening_test" / "index.html").write_text(HTML.replace("__TRIALS__", json.dumps(trials)), encoding="utf-8")
+    html = HTML.replace("__TRIALS__", json.dumps(trials)).replace("__TESTID__", out.name)
+    (out / "listening_test" / "index.html").write_text(html, encoding="utf-8")
     with open(out / "key.csv", "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=list(key[0]))
         w.writeheader()
