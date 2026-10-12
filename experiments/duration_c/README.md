@@ -228,6 +228,7 @@ python e_analyze.py --key ~/hakka_tts/exp_e/<名稱>/key.csv --responses <放回
 | `d1_compare.py` | D1:波形 vs attn 母音時長、blank 比例、波形版 ET 指標 | 否 |
 | `d1_pipeline.sh` | 一行跑完 合成 → MFA 對齊 → 波形比較 | 是 |
 | `f1_subgroups.py` | F1:依韻尾、調值、停頓前、性別分組的 VBias / VDE / ρ | 否 |
+| `c3_target_check.py` | C3 前置診斷:C2 母音核偏差拆成 訓練目標 / blank 靜音 / 預測器 / 取整 | 是(只跑編碼器) |
 | `e_build_ab.py` | E2:產生成對比較聽測(HTML + 音檔,響度正規化,含注意力檢查題) | 否 |
 | `e_analyze.py` | E2:CMOS 與偏好比例,聽者×句子交叉重抽 CI,注意力檢查排除 | 否 |
 | `hakka_c/` | 共用模組(路徑常數、TextGrid、符號對應、時長換算、統計、Matcha 介面) | — |

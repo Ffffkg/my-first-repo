@@ -333,3 +333,19 @@ def test_margin_offset():
     assert margin_offset(0.60, 2.00, 2.50, 2.50, m) == 0.0
     # 對不上任何情況
     assert margin_offset(0.60, 2.00, 2.50, 1.20, m) is None
+
+
+def test_c3_components():
+    sys.path.insert(0, str(ROOT))
+    from c3_target_check import syllable_components
+    d = np.array([2, 3, 1, 5, 4])                        # blank, 子音, blank, 母音, 句尾 blank(含 3 frame 靜音)
+    syl = [{"nuc": 1, "coda": "", "ref_ms": 9.5 * HOP_MS}]
+    c = syllable_components(d, d.astype(float), syl)[0]
+    assert c["A"] == pytest.approx(0, abs=1e-3)          # half:5 + 0.5·1 + 1·4 = 9.5 frame
+    assert c["S"] == pytest.approx(3 * HOP_MS, abs=1e-3)
+    assert c["B"] == pytest.approx(0, abs=1e-3) and c["R"] == pytest.approx(0, abs=1e-3) and c["N"] == 0
+    c = syllable_components(d, d - 0.3, syl)[0]           # 預測略短 → ceil 補回同樣的整數
+    assert c["B"] == pytest.approx(-0.75 * HOP_MS, abs=1e-3)
+    assert c["R"] == pytest.approx(0.75 * HOP_MS, abs=1e-3)
+    assert c["total"] == pytest.approx(c["A"] + c["B"] + c["R"], abs=1e-2)
+    assert c["open"] == 1 and c["blank_r_tgt"] == 4
