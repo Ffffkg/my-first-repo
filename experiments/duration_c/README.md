@@ -258,6 +258,7 @@ python e_analyze.py --key ~/hakka_tts/exp_e/hailu_base_vs_c2/key.csv  --response
 | `c1_calibrate.py` | C1:驗證集估校正參數,測試集評估五個變體 | 否 |
 | `c_eval.py` | 任一模型的 ET 指標;`--synth` 合成算 MCD,存 wav 與邊界(實驗 D 會用) | 是 |
 | `c_compare.py` | 兩系統配對比較 + 成功標準檢查 | 否 |
+| `c_seeds.py` | 多種子合併:方法 − 基準 的配對差跨種子平均、句子重抽 CI、各種子的值(論文主表) | 否 |
 | `c2_mfa2durations.py` | C2:TextGrid → durations/*.npy、*_mfadur.txt | 否 |
 | `c2_setup.py` | C2:由 baseline 產生 data / experiment config | 否 |
 | `d1_prepare_mfa.py` | D1:合成音檔 → MFA corpus(wav + 拼音 .lab),印出 mfa align 指令 | 否 |
