@@ -271,6 +271,7 @@ python e_analyze.py --key ~/hakka_tts/exp_e/hailu_base_vs_c2/key.csv  --response
 | `g1_tone_feats.py` | G1:音節母音核 5 點 F0 特徵(真人錄音或合成語音,沿用 D1 的 MFA 對齊) | 否 |
 | `g1_tone_eval.py` | G1:客觀聲調辨識率(真人訓練的分類器辨識合成語音;手冊 tone_error_rate 的實作版) | 否 |
 | `g1_run.sh` | G1 一鍵:特徵 → baseline vs C2 三種子聲調辨識率 | 否 |
+| `g2_run.sh` | G2 一鍵:TAAI 1h 八個模型合成 → 對齊 → F0 → 去聲分析(best ckpt、目標腔 mel 統計量) | 是 |
 | `g2_qusheng.py` | G2:去聲方向不對稱的音節層級檢驗(F0 誤差的方向效應、海陸 11↔33 混淆) | 否 |
 | `e_build_ab.py` | E2:產生線上成對比較聽測(長輩友善手機頁面 + 音檔,響度正規化,含注意力檢查題) | 否 |
 | `e_ab_template.html` | E2 聽測頁面範本(e_build_ab.py 讀取) | — |
