@@ -268,6 +268,8 @@ python e_analyze.py --key ~/hakka_tts/exp_e/hailu_base_vs_c2/key.csv  --response
 | `c4_size_setup.py` | C4:由 1h baseline 設定產生其他資料量的設定(只換訓練清單) | 否 |
 | `c4_run.sh` | C4 一鍵:10h(或 SIZE=)baseline vs C2 訓練 + D1 評估 | 是 |
 | `c5_run.sh` | C5(C2 + 跨腔遷移初始化)與 C3b(C2 + 較大時長預測器)訓練 + D1 評估,與 C2 比較 | 是 |
+| `c6_pick_rounding.py` | 在驗證集上替每個系統選取整方式(ceil / cum),測試集不參與 | 否 |
+| `c6_run.sh` | C6(遷移 + 較大時長預測器)訓練 + 各系統驗證集選取整 + 最終比較 | 是 |
 | `c3_target_check.py` | C3 前置診斷:C2 母音核偏差拆成 訓練目標 / blank 靜音 / 預測器 / 取整 | 是(只跑編碼器) |
 | `c3_fit_pp.py` | C3a:在驗證集估停頓前母音核縮放 s_pp(c_eval / d1_pipeline 用 `--s-pp`) | 否 |
 | `c3_pp_split.py` | C3 診斷:停頓前分「句末 / 句中停頓前」,比較訓練/驗證/測試集的偏差與組成 | 否 |

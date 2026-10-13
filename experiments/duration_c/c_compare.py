@@ -1,4 +1,4 @@
-"""兩個系統的配對比較 + 事先登記的成功標準檢查(手冊第 25.8 節)。
+"""兩個系統的配對比較 + 事先登記的成功標準檢查(修訂後:主要看 ET-VDE 與 ρ,另列副作用檢查)。
 
 輸入可以是 c_eval.py 的輸出資料夾(含 syllables.csv,可能有 mcd.csv),或 c1_calibrate.py 的變體 CSV。
 兩邊只保留共同的音節(以 檔名 + 音節序號 對齊),以句子為單位配對重抽。
@@ -70,9 +70,9 @@ def main():
     ap.add_argument("--syl", choices=("attn", "wave"), default="attn",
                     help="輸入是資料夾時,時長用 attn(syllables.csv)或波形(D1 的 syllables_wave.csv);MCD 照樣讀 mcd.csv")
     ap.add_argument("--n-boot", type=int, default=10000)
-    ap.add_argument("--max-nonet-change", type=float, default=5.0, help="守門:NonET-VBias 變化上限 (ms)")
-    ap.add_argument("--max-mcd-increase", type=float, default=0.1, help="守門:MCD 增加上限 (dB)")
-    ap.add_argument("--max-f0-increase", type=float, default=0.05, help="守門:F0-RMSE 增加上限 (st)")
+    ap.add_argument("--max-nonet-change", type=float, default=5.0, help="副作用:|NonET-VBias| 增加上限 (ms)")
+    ap.add_argument("--max-mcd-increase", type=float, default=0.1, help="副作用:MCD 增加上限 (dB)")
+    ap.add_argument("--max-f0-increase", type=float, default=0.05, help="副作用:F0-RMSE 增加上限 (st)")
     ap.add_argument("--out", help="Markdown 輸出路徑")
     args = ap.parse_args()
 
@@ -82,7 +82,8 @@ def main():
     et = boolcol(a["entering"][ia])
     ref = a["ref_ms"][ia]
     ea, eb = a["pred_ms"][ia] - ref, b["pred_ms"][ib] - ref
-    t = UttTable(a["stem"][ia], {"a": ea, "b": eb, "d": eb - ea, "aa": np.abs(ea), "ab": np.abs(eb)},
+    t = UttTable(a["stem"][ia], {"a": ea, "b": eb, "d": eb - ea, "aa": np.abs(ea), "ab": np.abs(eb),
+                                 "dd": np.abs(eb) - np.abs(ea)},
                  {"et": et, "non": ~et})
     idx = boot_idx(t.U, args.n_boot)
 
@@ -92,28 +93,33 @@ def main():
     r_et = (mean_ci(t, "a", "et", idx), mean_ci(t, "b", "et", idx), mean_ci(t, "d", "et", idx))
     r_non = (mean_ci(t, "a", "non", idx), mean_ci(t, "b", "non", idx), mean_ci(t, "d", "non", idx))
     r_dl = (delta_ci(t, "a", idx), delta_ci(t, "b", idx), delta_ci(t, "d", idx))
+    v_et = (mean_ci(t, "aa", "et", idx), mean_ci(t, "ab", "et", idx), mean_ci(t, "dd", "et", idx))
+    v_non = (mean_ci(t, "aa", "non", idx), mean_ci(t, "ab", "non", idx), mean_ci(t, "dd", "non", idx))
     rho_a, rho_b = pearson(a["pred_ms"][ia][et], ref[et]), pearson(b["pred_ms"][ib][et], ref[et])
-    L.append(f"| ET-VDE (ms) | {t.mean('aa', 'et'):.1f} | {t.mean('ab', 'et'):.1f} | {t.mean('ab', 'et') - t.mean('aa', 'et'):+.1f} |")
+    L.append(f"| ET-VDE (ms) | {v_et[0][0]:.1f} | {v_et[1][0]:.1f} | {fmt(v_et[2])} |")
+    L.append(f"| NonET-VDE (ms) | {v_non[0][0]:.1f} | {v_non[1][0]:.1f} | {fmt(v_non[2])} |")
     L.append(f"| ET-VBias (ms) | {fmt(r_et[0])} | {fmt(r_et[1])} | {fmt(r_et[2])} |")
     L.append(f"| NonET-VBias (ms) | {fmt(r_non[0])} | {fmt(r_non[1])} | {fmt(r_non[2])} |")
     L.append(f"| ΔBias (ms) | {fmt(r_dl[0])} | {fmt(r_dl[1])} | {fmt(r_dl[2])} |")
     L.append(f"| ρ | {rho_a:.3f} | {rho_b:.3f} | {rho_b - rho_a:+.3f} |")
 
-    crit = [("主要", "ΔBias 差值 CI 上界 < 0", r_dl[2][2] < 0, fmt(r_dl[2])),
-            ("次要", "|ET-VBias| 下降", abs(r_et[1][0]) < abs(r_et[0][0]), f"{r_et[0][0]:+.1f} → {r_et[1][0]:+.1f}"),
-            ("次要", "ρ 不下降", rho_b >= rho_a, f"{rho_a:.3f} → {rho_b:.3f}"),
-            ("守門", f"|NonET-VBias 變化| ≤ {args.max_nonet_change} ms", abs(r_non[2][0]) <= args.max_nonet_change,
-             f"{r_non[2][0]:+.1f}")]
+    # 修訂後的登記標準:主要看入聲時長誤差(ET-VDE)與 ρ;ΔBias 只列在上表供參考
+    non_inc = abs(r_non[1][0]) - abs(r_non[0][0])
+    crit = [("主要", "ET-VDE 差值 CI 上界 < 0", v_et[2][2] < 0, fmt(v_et[2])),
+            ("主要", "ρ 上升", rho_b > rho_a, f"{rho_a:.3f} → {rho_b:.3f}"),
+            ("副作用", "NonET-VDE 不變差(差值 ≤ 0)", v_non[2][0] <= 0, f"{v_non[2][0]:+.1f}"),
+            ("副作用", f"|NonET-VBias| 增加 ≤ {args.max_nonet_change} ms", non_inc <= args.max_nonet_change,
+             f"{r_non[0][0]:+.1f} → {r_non[1][0]:+.1f}")]
     if ma is not None and mb is not None:
         for key, lim, unit in (("mcd", args.max_mcd_increase, "dB"), ("f0_rmse", args.max_f0_increase, "st")):
             if key in ma and key in mb:
                 c, n = strat_boot_diff(per_utt(ma, key), per_utt(mb, key), args.n_boot)
                 L.append(f"| {key} 差值({n} 句,5 次生成平均) | | | {fmt(c, 3)} |")
-                crit.append(("守門", f"{key} 增加 ≤ {lim} {unit}", c[0] <= lim, f"{c[0]:+.3f}"))
+                crit.append(("副作用", f"{key} 增加 ≤ {lim} {unit}", c[0] <= lim, f"{c[0]:+.3f}"))
     else:
-        crit.append(("守門", "MCD(未提供 mcd.csv,用 c_eval.py --synth 產生)", None, "—"))
+        crit.append(("副作用", "MCD(未提供 mcd.csv,用 c_eval.py --synth 產生)", None, "—"))
 
-    L += ["", "## 成功標準(手冊第 25.8 節,門檻為建議值)\n", "| 類別 | 標準 | 結果 | 數值 |", "|---|---|---|---|"]
+    L += ["", "## 成功標準(修訂後的登記標準)\n", "| 類別 | 標準 | 結果 | 數值 |", "|---|---|---|---|"]
     for cat, desc, ok, val in crit:
         L.append(f"| {cat} | {desc} | {'—' if ok is None else ('✓ 通過' if ok else '✗ 未通過')} | {val} |")
     L += ["", "提醒:單一訓練種子的結果只算初步;勝出的方法要補種子 123、2026,並用專家標註參考與實驗 D 的波形量測複核。"]

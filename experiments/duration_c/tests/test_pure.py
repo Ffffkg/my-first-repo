@@ -375,6 +375,22 @@ def test_fit_s_pp_recovers_overlength():
     assert abs(e[pp].mean()) < 1e-6 and abs(e[~pp].mean()) < 1e-6
 
 
+def test_pick_rounding_follows_predictor_bias():
+    sys.path.insert(0, str(ROOT))
+    from c6_pick_rounding import pick
+
+    def recs(offset):                                     # w = 目標 + offset:offset≈0 → ceil 偏長 → 選 cum
+        out = []
+        for k in range(10):
+            d = np.array([1, 4, 1, 6, 1, 5, 1, 7, 1])
+            w = d + offset + 0.1 * np.sin(np.arange(9) + k)
+            out.append({"d": d, "w": w, "syllables": [
+                {"nuc": 1, "entering": True, "prepausal": False}, {"nuc": 3, "entering": False, "prepausal": False}]})
+        return out
+    assert pick(recs(0.0))[0] == "cum"
+    assert pick(recs(-0.5))[0] == "ceil"                  # 預測器偏短半格:ceil 剛好補回
+
+
 def test_f0_nucleus_points_on_glide(tmp_path):
     from hakka_c.f0feat import f0_track, nucleus_points
     sr = 22050
