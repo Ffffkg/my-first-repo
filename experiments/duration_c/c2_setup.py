@@ -62,11 +62,18 @@ def main():
     new_data = f"{data_name}_mfadur"
     new_exp = args.prefix + re.sub(r"^hakka_", "", args.base_exp)
 
-    for path in (data_dir / f"{new_data}.yaml", exp_dir / f"{new_exp}.yaml"):
-        if path.exists() and not args.force:
-            sys.exit(f"★ {path} 已存在(加 --force 覆寫)")
+    # 多個 experiment 可共用同一份 data config(例如從零與遷移都用目標腔的資料):內容相同就沿用,不同才需要 --force
+    data_path = data_dir / f"{new_data}.yaml"
+    same_data = data_path.exists() and yaml.safe_load(data_path.read_text(encoding="utf-8")) == dcfg
+    if data_path.exists() and not same_data and not args.force:
+        sys.exit(f"★ {data_path} 已存在且內容不同(加 --force 覆寫;會影響共用它的其他實驗)")
+    if (exp_dir / f"{new_exp}.yaml").exists() and not args.force:
+        sys.exit(f"★ {exp_dir / f'{new_exp}.yaml'} 已存在(加 --force 覆寫)")
 
-    (data_dir / f"{new_data}.yaml").write_text(yaml.safe_dump(dcfg, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    if same_data:
+        print(f"  沿用既有的 configs/data/{new_data}.yaml(內容相同)")
+    else:
+        data_path.write_text(yaml.safe_dump(dcfg, allow_unicode=True, sort_keys=False), encoding="utf-8")
 
     new_defaults = []
     for item in cfg.get("defaults", []):
