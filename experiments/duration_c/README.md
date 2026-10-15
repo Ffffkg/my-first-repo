@@ -276,6 +276,8 @@ python e_analyze.py --key ~/hakka_tts/exp_e/hailu_base_vs_c2/key.csv  --response
 | `c8_run.sh` | C8 一鍵:C6 長度校正(三種子)+ 合併比較 + G1 聲調辨識 + F1 分組 | 部分(校正要合成) |
 | `h1_ceiling.py` | H1:時長 ρ 上限診斷(oracle-rate、純文字特徵 GBM 1h / 大資料) | 否 |
 | `h1_run.sh` | H1 一鍵:含 48h 模型的波形量測 | 部分(48h 模型要合成) |
+| `h2_metrics.py` | H2:時長命中率(±20 ms / ±30 ms / ±20%)與訓練 / 驗證 loss 摘要 | 否 |
+| `h2_run.sh` | H2 一鍵:命中率、loss、G1v2(加強版聲學聲調分類器) | 否 |
 | `c3_target_check.py` | C3 前置診斷:C2 母音核偏差拆成 訓練目標 / blank 靜音 / 預測器 / 取整 | 是(只跑編碼器) |
 | `c3_fit_pp.py` | C3a:在驗證集估停頓前母音核縮放 s_pp(c_eval / d1_pipeline 用 `--s-pp`) | 否 |
 | `c3_pp_split.py` | C3 診斷:停頓前分「句末 / 句中停頓前」,比較訓練/驗證/測試集的偏差與組成 | 否 |

@@ -52,7 +52,7 @@ def load(path):
     return t
 
 
-def featurize(t):
+def featurize(t, rich=False):
     st = to_semitone(t["spk"], t["pts"], speaker_medians(t["spk"], t["pts"]))
     with np.errstate(all="ignore"):
         mean = np.nanmean(st, axis=1)
@@ -66,7 +66,16 @@ def featurize(t):
     nxt = np.array([key.get((s, g, i + 1), -1) for s, g, i in zip(t["stem"], t["gen_seed"], t["syl_idx"])])
     pick = lambda a, ix: np.where(ix >= 0, a[np.maximum(ix, 0)], np.nan)  # noqa: E731
     F.update(prev_st5=pick(last, prev), prev_mean=pick(mean, prev), next_st1=pick(first, nxt), next_mean=pick(mean, nxt))
-    return np.column_stack([F[k] for k in FEATS])
+    if not rich:
+        return np.column_stack([F[k] for k in FEATS])
+    # 加強版(G1v2,仍然只有聲學):前後音節完整 5 點輪廓與時長、時長相對於整句中位數(去掉語速)
+    cols = [F[k] for k in FEATS]
+    for ix in (prev, nxt):
+        cols += [pick(st[:, k], ix) for k in range(5)] + [pick(F["logdur"], ix)]
+    utt = np.array([f"{s}|{g}" for s, g in zip(t["stem"], t["gen_seed"])])
+    med = {u: np.nanmedian(F["logdur"][utt == u]) for u in set(utt)}
+    cols.append(F["logdur"] - np.array([med[u] for u in utt]))
+    return np.column_stack(cols)
 
 
 def per_stem(t, correct, mask, keys):
@@ -99,6 +108,7 @@ def main():
     ap.add_argument("--compare", nargs=2, action="append", default=[], metavar=("A", "B"), help="配對比較 B − A")
     ap.add_argument("--n-boot", type=int, default=2000)
     ap.add_argument("--out-dir", help="預設 ~/hakka_tts/exp_c/g1/<dialect>")
+    ap.add_argument("--rich", action="store_true", help="G1v2:加前後音節完整輪廓、時長與整句語速正規化(仍只用聲學)")
     args = ap.parse_args()
 
     from sklearn.ensemble import HistGradientBoostingClassifier
@@ -107,7 +117,7 @@ def main():
     out_dir.mkdir(parents=True, exist_ok=True)
     tr = load(args.train)
     clf = HistGradientBoostingClassifier(max_iter=300, learning_rate=0.1, random_state=0)
-    clf.fit(featurize(tr), tr["tone"])
+    clf.fit(featurize(tr, args.rich), tr["tone"])
     print(f"分類器:{len(tr['tone'])} 個真人音節訓練,聲調 {sorted(set(tr['tone']))}")
 
     tables = {}
@@ -121,7 +131,7 @@ def main():
 
     res = {}
     for name, t in tables.items():
-        pred = clf.predict(featurize(t))
+        pred = clf.predict(featurize(t, args.rich))
         res[name] = (t, pred == t["tone"], np.isin(pred, list(ENTERING_TONES)))
         write_rows(out_dir / f"pred_{name.replace('(', '_').replace(')', '')}.csv",
                    [{"stem": s, "gen_seed": g, "syl_idx": i, "tone": y, "pred": p}
