@@ -25,10 +25,14 @@ import sys, yaml
 from pathlib import Path
 M, exp = Path(sys.argv[1]), sys.argv[2]
 cfg = yaml.safe_load((M / "configs/experiment" / f"{exp}.yaml").read_text(encoding="utf-8"))
-data = [v for it in cfg.get("defaults", []) if isinstance(it, dict) for k, v in it.items() if k.replace(" ", "") in ("override/data", "/data")][0]
+data = [str(v).replace(".yaml", "") for it in cfg.get("defaults", []) if isinstance(it, dict)
+        for k, v in it.items() if k.replace(" ", "") in ("override/data", "/data")][0]
 d = yaml.safe_load((M / "configs/data" / f"{data}.yaml").read_text(encoding="utf-8"))
 print(Path(d["train_filelist_path"]).stem, Path(d["valid_filelist_path"]).stem)
 PY
+}
+best_ckpt() {  # 與 c_eval 相同的規則:最新一次 run、檔名上驗證損失最低的 best
+  python -c "import sys; sys.path.insert(0, '$HERE'); from hakka_c.matcha_io import find_ckpt; print(find_ckpt('$1', 'best'))"
 }
 newest_ckpt() { ls -t "$M"/logs/train/"$1"/runs/*/checkpoints/*.ckpt 2>/dev/null | head -1; }
 
@@ -60,16 +64,26 @@ for d in sixian hailu; do
 
   # ---- C9b 第 1 步:來源腔 48h 的 MFA 時長 → 來源模型(大時長預測器)
   echo "===== $d:來源 $s 48h 預訓練($(date '+%m-%d %H:%M'))"
+  src_ok=1; OK=$H/exp_c/c9; mkdir -p "$OK"
   if [ ! -f "$M/logs/train/$dpsrc/DONE" ]; then
     read -r tr va <<< "$(data_lists "$src48")"
-    echo "  來源清單:$tr / $va"
-    [ -f "$M/data/hakka/joint/$s/${tr}_mfadur.txt" ] && [ -f "$M/data/hakka/joint/$s/${va}_mfadur.txt" ] || \
+    echo "  來源清單:${tr:-?} / ${va:-?}"
+    [ -n "$tr" ] && [ -n "$va" ] || { echo "★ 讀不到 $src48 的訓練/驗證清單"; src_ok=0; }
+    # 一律用目前版本的程式重新產生 48h 的 MFA 時長(舊檔可能是修正 margin 規則之前做的)
+    if [ $src_ok = 1 ] && [ ! -f "$OK/mfadur_${s}_48h.ok" ]; then
       python "$HERE/c2_mfa2durations.py" --dialect "$s" --lists "$tr" "$va" --offset-mode margin --margin-ms 50 \
-          > "$H/runs/c9_mfadur_$s.log" 2>&1 || { echo "★ $s 48h MFA 時長失敗(看 $H/runs/c9_mfadur_$s.log)"; }
-    [ -f "$M/configs/experiment/$srcc2.yaml" ] || python "$HERE/c2_setup.py" --base-exp "$src48" > /dev/null \
-      || echo "★ $srcc2 設定失敗"
-    init=$(newest_ckpt "$src48"); best=$(ls "$M"/logs/train/"$src48"/runs/*/checkpoints/best*.ckpt 2>/dev/null | head -1)
-    [ -n "$best" ] && init=$best
+          > "$H/runs/c9_mfadur_$s.log" 2>&1 && touch "$OK/mfadur_${s}_48h.ok" \
+          || { echo "★ $s 48h MFA 時長失敗(看 $H/runs/c9_mfadur_$s.log)"; src_ok=0; }
+      tail -3 "$H/runs/c9_mfadur_$s.log" | sed 's/^/  /'
+    fi
+    if [ $src_ok = 1 ]; then
+      python "$HERE/c2_setup.py" --base-exp "$src48" --force > "$H/runs/c9_setup_$s.log" 2>&1 \
+          || { echo "★ $srcc2 設定失敗(看 $H/runs/c9_setup_$s.log)"; src_ok=0; }
+      grep -E "filelist_path" "$H/runs/c9_setup_$s.log" | sed 's/^/  /'
+    fi
+    init=$(best_ckpt "$src48")
+  fi
+  if [ $src_ok = 1 ] && [ ! -f "$M/logs/train/$dpsrc/DONE" ]; then
     echo "----- $dpsrc 設定檢查(初始化 $init)"
     (cd "$M" && python matcha/train.py experiment="$srcc2" run_name="$dpsrc" $DP_OVR ++trainer.max_steps="$DPSRC_STEPS" \
         ++transfer_from="$init" --cfg job 2>&1 | grep -n -E "kernel_size|filter_channels_dp|load_durations|max_steps|transfer_from" | head -8)
@@ -91,7 +105,7 @@ for d in sixian hailu; do
     grep -E "^\[transfer\]" "$H/runs/$c9a.log" | head -1
     has_step40k "$c9a" || echo "★ 訓練失敗:$c9a"
   fi
-  if ! has_step40k "$c9b" && [ -n "$src_ckpt" ]; then
+  if ! has_step40k "$c9b" && [ -f "$M/logs/train/$dpsrc/DONE" ] && [ -n "$src_ckpt" ]; then
     echo "===== 訓練 $c9b(來源 $src_ckpt)($(date '+%m-%d %H:%M'))"
     (cd "$M" && python matcha/train.py experiment="$c5" run_name="$c9b" $DP_OVR transfer_from="$src_ckpt") > "$H/runs/$c9b.log" 2>&1
     grep -E "^\[transfer\]" "$H/runs/$c9b.log" | head -1      # 重置數應該回到 2 個(時長預測器這次有複製)
