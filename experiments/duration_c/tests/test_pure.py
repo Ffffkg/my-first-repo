@@ -391,6 +391,102 @@ def test_pick_rounding_follows_predictor_bias():
     assert pick(recs(-0.5))[0] == "ceil"                  # 預測器偏短半格:ceil 剛好補回
 
 
+def test_geo_mean_w_and_probe_ensemble_gain(tmp_path):
+    """多個種子的連續時長取幾何平均:獨立雜訊被平均掉,ρ 變高、誤差變小。"""
+    from hakka_c.analysis import geo_mean_w
+    assert np.allclose(geo_mean_w([[1.0, 4.0], [4.0, 1.0]]), [2.0, 2.0])
+    sys.path.insert(0, str(ROOT))
+    import h3_probe as P
+    truth = _fake_recs(60, 5, bias_et=0.0)
+    dirs = []
+    for k in range(3):
+        rng = np.random.default_rng(100 + k)
+        recs = []
+        for rec in truth:
+            w = np.array(rec["w"], float)
+            for s in rec["syllables"]:
+                w[2 * s["nuc"] + 1] *= float(np.exp(rng.normal(0, 0.25)))      # 各種子獨立的預測雜訊
+            recs.append(dict(rec, w=w))
+        d = tmp_path / f"seed{k}"
+        d.mkdir()
+        pickle.dump({"params": {"rounding": "cum"}, "recs": recs}, open(d / "recs.pkl", "wb"))
+        dirs.append(str(d))
+    stem, idx, et, ref, Pm, ens, rds = P.system_tables(dirs)
+    single = P.mean_metrics(et, ref, Pm)
+    ensm = P.metrics(et, ref, ens)
+    assert ensm["et_vde"] < single["et_vde"]
+    assert ensm["et_rho"] > single["et_rho"]
+    ci = P.boot_ci(stem, et, ref, Pm, ens, ["et_vde"], n_boot=200)
+    assert ci["et_vde"][2] < 0                                        # 誤差下降的 CI 上界 < 0
+
+
+def test_h3_xdialect_blend_runs(tmp_path, monkeypatch):
+    """跨腔 GBM + 神經混合在假資料上能跑完,且來源腔資料在目標腔很少時有幫助。"""
+    sys.path.insert(0, str(ROOT))
+    import h1_ceiling as H
+    import h3_xdialect as X
+    monkeypatch.setenv("HAKKA_ROOT", str(tmp_path / "hakka"))
+    rng = np.random.default_rng(0)
+
+    def mk(tag, n_utt):
+        rows = []
+        for u in range(n_utt):
+            for i in range(8):
+                coda = str(rng.choice(["-", "d", "g", "n", "ng"]))
+                nuc = str(rng.choice(["a", "i", "u", "e"]))
+                et = coda in ("d", "g")
+                pp = int(i == 7)
+                ref = 60 + (25 if not et else 0) + (15 if nuc == "a" else 0) + 30 * pp + rng.normal(0, 8)
+                rows.append({"stem": f"{tag}{u}", "syl_idx": i, "ref_ms": max(ref, 20), "spk": "0",
+                             "tone": str(rng.choice(["1", "2", "3"])), "coda": coda, "nuc": nuc, "onset": "s",
+                             "entering": int(et), "prepausal": pp, "final": pp, "idx": i, "from_end": 7 - i, "n_syl": 8,
+                             "to_pause": 7 - i, "from_pause": i, "p_tone": "#", "p_coda": "#", "p_prepausal": 0,
+                             "p_entering": 0, "n_tone": "#", "n_coda": "#", "n_onset": "-", "n_entering": 0})
+        return rows
+    cache = {}
+
+    def fake_extract(dialect, split, max_utts, cleaners="hakka_cleaners"):
+        n = {"test": 60, "val": 40, "ladder_1h": 6, "ladder_10h": 100, "ladder_48h": 400}[split]
+        cache.setdefault((dialect, split), mk(split[:3] + dialect[:1], n))
+        return [dict(r) for r in cache[(dialect, split)]]
+    monkeypatch.setattr(H, "extract", fake_extract)
+
+    def nn_recs(rows, seed):
+        r = np.random.default_rng(seed)
+        by = {}
+        for x in rows:
+            by.setdefault(x["stem"], []).append(x)
+        recs = []
+        for stem, rs in by.items():
+            w, syl = [1.0], []
+            for j, x in enumerate(rs):
+                w += [3.0, 1.0, x["ref_ms"] / 11.61 * float(np.exp(r.normal(0, 0.3))), 1.0]
+                syl.append({"idx": x["syl_idx"], "nuc": 2 * j + 1, "entering": bool(x["entering"]), "ref_ms": x["ref_ms"]})
+            recs.append({"stem": stem, "w": np.array(w), "syllables": syl})
+        return recs
+    dirs, vals = [], []
+    for k in range(2):
+        d = tmp_path / f"t{k}"
+        d.mkdir()
+        pickle.dump({"recs": nn_recs(fake_extract("sixian", "test", 0), k)}, open(d / "recs.pkl", "wb"))
+        pickle.dump({"recs": nn_recs(fake_extract("sixian", "val", 0), 10 + k)}, open(tmp_path / f"v{k}.pkl", "wb"))
+        dirs.append(str(d))
+        vals.append(str(tmp_path / f"v{k}.pkl"))
+    out = tmp_path / "x.md"
+    monkeypatch.setattr(sys, "argv", ["h3_xdialect.py", "--dialect", "sixian", "--source", "hailu", "--valid-list", "val",
+                                      "--c6val", ",".join(vals), "--c6test", ",".join(dirs), "--out", str(out)])
+    X.main()
+    text = out.read_text(encoding="utf-8")
+    assert "零樣本" in text and "集成 + GBM" in text
+    rho = {}
+    for line in text.splitlines():
+        if line.startswith("| 文字特徵 GBM・目標腔 ladder_1h"):
+            rho["t1"] = float(line.split("|")[2])
+        if "來源 + 目標 ladder_1h(目標權重 10)" in line:
+            rho["st"] = float(line.split("|")[2])
+    assert rho["st"] > rho["t1"]
+
+
 def test_f0_nucleus_points_on_glide(tmp_path):
     from hakka_c.f0feat import f0_track, nucleus_points
     sr = 22050

@@ -27,7 +27,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from hakka_c import config as C  # noqa: E402
-from hakka_c.analysis import eval_rows, pred_frames, summarize  # noqa: E402
+from hakka_c.analysis import eval_rows, geo_mean_w, pred_frames, summarize  # noqa: E402
 from hakka_c.csvio import read_cols, write_rows  # noqa: E402
 from hakka_c.matcha_io import Engine, find_ckpt, import_eval_v2, load_mel_stats, read_filelist, textgrid_index  # noqa: E402
 from hakka_c.structure import StructError, build_utt, is_pause  # noqa: E402
@@ -65,6 +65,7 @@ def main():
     ap.add_argument("--s-non", type=float)
     ap.add_argument("--s-pp", type=float, help="停頓前音節母音核的縮放(c3_fit_pp.py 在驗證集估)")
     ap.add_argument("--data-yaml", help="mel 統計量來源(遷移模型必填)")
+    ap.add_argument("--ens-exps", help="逗號分隔的其他實驗:時長取這些模型與主模型的 log 平均(編碼器輸出與解碼器仍用主模型)")
     ap.add_argument("--cleaners", default="hakka_cleaners")
     ap.add_argument("--synth", action="store_true", help="合成並計算 MCD,存 wav 與邊界")
     ap.add_argument("--per-spk", type=int, default=50)
@@ -99,7 +100,13 @@ def main():
     rows = read_filelist(fl)
     print(f"checkpoint {ckpt}\n推論設定 {kw}\n輸出 {out}")
 
-    eng = Engine(ckpt, args.device, (args.cleaners,), load_mel_stats(args.data_yaml) if args.data_yaml else None)
+    mel_stats = load_mel_stats(args.data_yaml) if args.data_yaml else None
+    eng = Engine(ckpt, args.device, (args.cleaners,), mel_stats)
+    ens = []
+    for e in [x for x in (args.ens_exps or "").split(",") if x]:
+        ck = find_ckpt(e, args.which)
+        print(f"時長集成成員 {e}: {ck}")
+        ens.append(Engine(ck, args.device, (args.cleaners,), mel_stats))
     if args.selfcheck:
         ok, msg = eng.selfcheck(rows[0]["text"], rows[0]["spk"])
         print(f"自我檢查:{'一致 ✓' if ok else '★不一致'}({msg})")
@@ -120,6 +127,8 @@ def main():
             skipped[str(e)[:60]] += 1
             continue
         mu_x, x_mask, spks, w = eng.encode(x, r["spk"])
+        if ens:
+            w = geo_mean_w([w] + [m.encode(x, r["spk"])[3] for m in ens])
         recs.append({"dialect": args.dialect, "stem": stem, "spk": r["spk"], "T": None, "w": w, "mas": None,
                      "n": len(names), "names": names, "pause": [i for i, nm in enumerate(names) if is_pause(nm)],
                      "syllables": [asdict(s) for s in utt.syllables], "wav": r["wav"], "text": r["text"]})
@@ -127,7 +136,7 @@ def main():
     for sr in syl_rows:
         sr["cond"], sr["variant"] = cond, name
     write_rows(out / "syllables.csv", syl_rows)
-    pickle.dump({"cond": cond, "ckpt": str(ckpt), "params": kw, "recs": recs}, open(out / "recs.pkl", "wb"))
+    pickle.dump({"cond": cond, "ckpt": str(ckpt), "params": kw, "ens_exps": args.ens_exps, "recs": recs}, open(out / "recs.pkl", "wb"))
     summ, txt = summarize(read_cols(out / "syllables.csv"), n_boot=args.n_boot)
     print(f"\n入聲時長指標({len(recs)}/{len(rows)} 句):\n{txt}")
     if skipped:

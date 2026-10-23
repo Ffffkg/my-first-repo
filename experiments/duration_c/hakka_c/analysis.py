@@ -20,6 +20,12 @@ def scaled_w(rec, s_et=1.0, s_non=1.0, s_pp=1.0):
     return w
 
 
+def geo_mean_w(ws):
+    """同一句、多個模型的連續時長(長度相同)→ 取 log 平均(幾何平均),給時長集成用。"""
+    a = np.maximum(np.asarray(ws, dtype=float), 1e-8)
+    return np.exp(np.log(a).mean(axis=0))
+
+
 def pred_frames(rec, rounding="ceil", length_scale=1.0, s_et=1.0, s_non=1.0, s_pp=1.0):
     return matcha_frames(scaled_w(rec, s_et, s_non, s_pp), length_scale, rounding)
 

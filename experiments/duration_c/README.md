@@ -280,6 +280,13 @@ python e_analyze.py --key ~/hakka_tts/exp_e/hailu_base_vs_c2/key.csv  --response
 | `h2_run.sh` | H2 一鍵:命中率、loss、G1v2(加強版聲學聲調分類器) | 否 |
 | `c9_run.sh` | C9:時長預測器過擬合對策(C9a dropout 0.5;C9b 時長預測器先在另一腔 48h 預訓練再遷移) | 是 |
 | `c10_run.sh` | C10:C6 做法用在 10h 目標腔資料,與 10h base / C2、1h C6、48h 並列(loss、命中率) | 是 |
+| `h3_probe.py` | H3:預測器本身的時長準確度(不經合成與 MFA 重新對齊)+ 多種子集成的增益 + 與波形量測對照 | 否 |
+| `h3_lossmap.py` | H3:時長 loss 依符號類別(blank、停頓、聲母、母音核、韻尾)拆解 | 否 |
+| `h3_xdialect.py` | H3:跨腔資料對文字特徵模型的幫助;神經預測器 + 文字特徵模型的混合 | 否 |
+| `h3_run.sh` | H3 一鍵(上面三個 + 時長集成的波形驗證) | 部分(集成合成) |
+| `c11_mix.py` | C11:合併「目標腔 1h × R」與「來源腔 48h」的 MFA 時長清單 | 否 |
+| `c11_run.sh` | C11:C6 + 來源腔 48h 回放(聯合訓練),與 C6 比較 | 是 |
+| `c12_ens.sh` | C12:C6 三個種子的時長取 log 平均(c_eval.py --ens-exps)後合成,波形驗證 | 是(合成) |
 | `c3_target_check.py` | C3 前置診斷:C2 母音核偏差拆成 訓練目標 / blank 靜音 / 預測器 / 取整 | 是(只跑編碼器) |
 | `c3_fit_pp.py` | C3a:在驗證集估停頓前母音核縮放 s_pp(c_eval / d1_pipeline 用 `--s-pp`) | 否 |
 | `c3_pp_split.py` | C3 診斷:停頓前分「句末 / 句中停頓前」,比較訓練/驗證/測試集的偏差與組成 | 否 |
