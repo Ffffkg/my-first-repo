@@ -279,6 +279,7 @@ python e_analyze.py --key ~/hakka_tts/exp_e/hailu_base_vs_c2/key.csv  --response
 | `h2_metrics.py` | H2:時長命中率(±20 ms / ±30 ms / ±20%)與訓練 / 驗證 loss 摘要 | 否 |
 | `h2_run.sh` | H2 一鍵:命中率、loss、G1v2(加強版聲學聲調分類器) | 否 |
 | `c9_run.sh` | C9:時長預測器過擬合對策(C9a dropout 0.5;C9b 時長預測器先在另一腔 48h 預訓練再遷移) | 是 |
+| `c10_run.sh` | C10:C6 做法用在 10h 目標腔資料,與 10h base / C2、1h C6、48h 並列(loss、命中率) | 是 |
 | `c3_target_check.py` | C3 前置診斷:C2 母音核偏差拆成 訓練目標 / blank 靜音 / 預測器 / 取整 | 是(只跑編碼器) |
 | `c3_fit_pp.py` | C3a:在驗證集估停頓前母音核縮放 s_pp(c_eval / d1_pipeline 用 `--s-pp`) | 否 |
 | `c3_pp_split.py` | C3 診斷:停頓前分「句末 / 句中停頓前」,比較訓練/驗證/測試集的偏差與組成 | 否 |
