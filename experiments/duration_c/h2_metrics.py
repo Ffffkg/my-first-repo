@@ -21,6 +21,7 @@ from hakka_c import config as C  # noqa: E402
 from hakka_c.csvio import boolcol, read_cols  # noqa: E402
 
 TOLS = (("±20 ms", lambda e, r: np.abs(e) <= 20), ("±30 ms", lambda e, r: np.abs(e) <= 30),
+        ("±40 ms", lambda e, r: np.abs(e) <= 40), ("±50 ms", lambda e, r: np.abs(e) <= 50),
         ("±20%", lambda e, r: np.abs(e) <= 0.2 * r))
 
 
@@ -30,7 +31,7 @@ def hit_table(systems, n_boot=2000, seed=42):
     stems = sorted(set(systems[0][1][0]["stem"]))
     sel = rng.integers(0, len(stems), size=(n_boot, len(stems)))
     pos = {s: i for i, s in enumerate(stems)}
-    L = ["| 系統 | 類別 | " + " | ".join(t for t, _ in TOLS) + " |", "|---|---|" + "---|" * len(TOLS)]
+    L = ["| 系統 | 類別 | " + " | ".join(t for t, _ in TOLS) + " | 90% 的音節誤差在(ms)內 |", "|---|---|" + "---|" * (len(TOLS) + 1)]
     for name, seeds in systems:
         for cls, want in (("入聲", True), ("舒聲", False)):
             cells = []
@@ -46,6 +47,9 @@ def hit_table(systems, n_boot=2000, seed=42):
                 draws = hits[sel].sum(axis=1) / ns[sel].sum(axis=1)
                 lo, hi = np.percentile(draws, [2.5, 97.5])
                 cells.append(f"{100 * p:.1f} [{100 * lo:.1f}, {100 * hi:.1f}]")
+            abs_err = np.concatenate([np.abs(c["pred_ms"] - c["ref_ms"])[(boolcol(c["entering"]) == want)
+                                                                           & np.array([s in pos for s in c["stem"]])] for c in seeds])
+            cells.append(f"{np.percentile(abs_err, 90):.0f}")
             L.append(f"| {name}({len(seeds)} 種子) | {cls} | " + " | ".join(cells) + " |")
     return L
 

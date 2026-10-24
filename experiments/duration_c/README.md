@@ -284,6 +284,7 @@ python e_analyze.py --key ~/hakka_tts/exp_e/hailu_base_vs_c2/key.csv  --response
 | `h3_lossmap.py` | H3:時長 loss 依符號類別(blank、停頓、聲母、母音核、韻尾)拆解 | 否 |
 | `h3_xdialect.py` | H3:跨腔資料對文字特徵模型的幫助;神經預測器 + 文字特徵模型的混合 | 否 |
 | `h3_run.sh` | H3 一鍵(上面三個 + 時長集成的波形驗證) | 部分(集成合成) |
+| `h4_tol.sh` | H4:成功率對容許範圍(±20/30/40/50 ms、±20%)與 90% 音節的誤差上限,base / C2 / C6 / 48h | 否 |
 | `c11_mix.py` | C11:合併「目標腔 1h × R」與「來源腔 48h」的 MFA 時長清單 | 否 |
 | `c11_run.sh` | C11:C6 + 來源腔 48h 回放(聯合訓練),與 C6 比較 | 是 |
 | `c12_ens.sh` | C12:C6 三個種子的時長取 log 平均(c_eval.py --ens-exps)後合成,波形驗證 | 是(合成) |
