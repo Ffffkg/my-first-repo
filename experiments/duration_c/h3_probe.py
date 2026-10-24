@@ -3,7 +3,9 @@
 為什麼要看「預測器本身」:
   波形評估 = 時長預測器 → 解碼器合成 → MFA 對合成音重新對齊 → 量母音核。最後一段 MFA 在合成音上也有 ±10–20 ms 的邊界誤差,
   會拉低命中率與 ρ。這裡直接用預測器輸出的連續時長 w(c_eval.py 存在每個評估資料夾的 recs.pkl 裡),
-  取整後只看母音核本身(不含 blank,避免靜音被分給母音),跟真人錄音的 MFA 母音核時長比。
+  取整後用「blank 最多算 1 frame 的 half 規則」換成母音核時長(訓練目標每個 blank 至少 1 frame、向左邊音素借,這個規則剛好
+  把借走的還回去,blank 裡的靜音不分給母音),跟真人錄音的 MFA 母音核時長比。
+  (第一版只看符號本身,系統性比 MFA 短約 1 frame,絕對數字不可用,已更正。)
   好處:沒有合成端的量測誤差、用全部測試句(不是 100 句)、不用 GPU、改任何時長方法幾秒就有結果。
 
 為什麼要看集成:
@@ -73,7 +75,7 @@ def system_tables(dirs):
         raise SystemExit(f"★ {dirs} 沒有共同的測試句")
     P, base = [], None
     for b, rd in zip(by, roundings):
-        stem, idx, et, ref, pred = to_arrays(eval_rows([b[s] for s in stems], rule="none", rounding=rd))
+        stem, idx, et, ref, pred = to_arrays(eval_rows([b[s] for s in stems], rule="halfcap", rounding=rd))
         if base is None:
             base = (stem, idx, et, ref)
         P.append(pred)
@@ -83,7 +85,7 @@ def system_tables(dirs):
         cnt = Counter(roundings).most_common()
         rd = cnt[0][0] if len(cnt) == 1 or cnt[0][1] > cnt[1][1] else "cum"
         recs = [dict(by[0][s], w=geo_mean_w([b[s]["w"] for b in by])) for s in stems]
-        ens = to_arrays(eval_rows(recs, rule="none", rounding=rd))[4]
+        ens = to_arrays(eval_rows(recs, rule="halfcap", rounding=rd))[4]
     return (*base, P, ens, roundings)
 
 
@@ -150,7 +152,7 @@ def main():
     head = "| 系統 | " + " | ".join(lab for _, lab, _ in COLS) + " |"
     sep = "|---|" + "---|" * len(COLS)
     L = [f"# H3 預測器本身的時長準確度與種子集成:{args.dialect}\n",
-         "母音核時長 = 預測器輸出取整後的母音核(不含 blank)vs 真人錄音 MFA 母音核;全部測試句。"
+         "母音核時長 = 預測器輸出取整後,用「blank 最多算 1 frame 的 half 規則」換成母音核 vs 真人錄音 MFA 母音核;全部測試句。"
          "單一種子 = 各種子分別算再平均;集成 = 各種子的連續時長取幾何平均後再取整。\n", head, sep]
     gain_lines = ["", "## 集成相對單一種子的增益(句子重抽 95% CI)\n",
                   "| 系統 | 入聲 ρ | 入聲誤差(ms) | 入聲 ±20 ms(百分點) | 入聲 ±30 ms(百分點) | 入聲 ±20%(百分點) |", "|---|---|---|---|---|---|"]

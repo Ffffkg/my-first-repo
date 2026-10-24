@@ -12,9 +12,16 @@ def merge_blank(d_all, rule="half"):
     half : 手冊 merge_blank_durations() 的規則。內部 blank 左右各半,頭尾 blank 全給邊界音素。
     left : 內部 blank 全給左邊音素(句首 blank 給第一個音素)。
     right: 內部 blank 全給右邊音素(句尾 blank 給最後一個音素)。
-    none : 不分配 blank,只看符號本身(下界)。
+    none : 不分配 blank,只看符號本身(下界;注意訓練目標每個 blank 至少 1 frame、向左邊音素借,
+           所以只看符號本身會比 MFA 母音短約 1 frame)。
+    halfcap: 同 half,但每個 blank 最多算 1 frame:借出去的那 1 frame 還給音素,blank 裡的靜音不分給音素。
+           = 把「預測器的輸出」換回和 MFA 母音核同一個定義的最乾淨量法(不在 RULES 內,c0/d1 的舊報表不受影響)。
     """
     d_all = np.asarray(d_all, dtype=float)
+    if rule == "halfcap":
+        d_all = d_all.copy()
+        d_all[0::2] = np.minimum(d_all[0::2], 1.0)
+        rule = "half"
     L = len(d_all)
     assert L % 2 == 1, f"長度應為 2n+1,得到 {L}"
     n = (L - 1) // 2

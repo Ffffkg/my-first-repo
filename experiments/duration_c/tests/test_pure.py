@@ -156,6 +156,19 @@ def test_merge_blank_rules():
         assert merge_blank(d, r).sum() == d.sum()       # 守恆
 
 
+def test_merge_blank_halfcap():
+    d = np.array([1, 10, 1, 20, 9], float)          # b p0 b p1 b;最後一個 blank 裡有 8 frame 的靜音
+    assert merge_blank(d, "halfcap").tolist() == [1 + 10 + 0.5, 0.5 + 20 + 1]
+    assert merge_blank(d, "half").tolist() == [1 + 10 + 0.5, 0.5 + 20 + 9]
+    # 訓練目標的借 frame 規則:halfcap 把借走的還回去 → 內部音素恰好是 MFA 的 frame 數,靜音不算進去
+    phone_sym = [0, 1, 2]
+    iv = [(0.10, 0.20), (0.20, 0.30), (0.30, 0.45)]
+    fr = mfa_to_frames(3, phone_sym, iv, int(0.6 * 22050 / 256))
+    mfa = [round(b * 22050 / 256) - round(a * 22050 / 256) for a, b in iv]
+    assert merge_blank(fr, "halfcap")[1] == mfa[1]
+    assert merge_blank(fr, "none")[1] == mfa[1] - 1                      # 只看符號本身會少 1 frame
+
+
 def _matcha_reference(w, ls):
     """照 Matcha synthesise() + generate_path 的語意逐步模擬。"""
     w_ceil = np.ceil(w.astype(np.float32)) * np.float32(ls)       # torch 是 float32

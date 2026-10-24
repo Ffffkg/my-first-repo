@@ -22,6 +22,7 @@ import h1_ceiling as H  # noqa: E402
 import h3_probe as P  # noqa: E402
 from hakka_c import config as C  # noqa: E402
 from hakka_c.analysis import geo_mean_w  # noqa: E402
+from hakka_c.durations import merge_blank  # noqa: E402
 
 CAT2 = H.CAT + ["dia"]
 
@@ -61,8 +62,9 @@ def nn_from_recs(recs_list):
     for recs in recs_list:
         d = {}
         for rec in recs:
+            merged = merge_blank(np.asarray(rec["w"], float), "halfcap") * C.HOP_MS      # 與 MFA 母音核同一個定義
             for s in rec["syllables"]:
-                d[(rec["stem"], int(s["idx"]))] = float(rec["w"][2 * s["nuc"] + 1]) * C.HOP_MS
+                d[(rec["stem"], int(s["idx"]))] = float(merged[s["nuc"]])
         per.append(d)
     keys = set.intersection(*[set(d) for d in per])
     return {k: [d[k] for d in per] for k in keys}
