@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# A1 前置:建立語音辨識(Omnilingual ASR)用的獨立 conda 環境 asr。不碰 tts 環境;只要跑一次,約 10 分鐘(不含模型下載)。
+#   事先(要 sudo,只做一次;libsndfile 是 fairseq2 需要的,後面幾個是編譯 kenlm 用的):
+#     sudo apt install -y libsndfile1 build-essential cmake zlib1g-dev libbz2-dev liblzma-dev
+#   bash a1_setup_env.sh
+# 為什麼要獨立環境:fairseq2 的原生函式庫必須和 PyTorch 版本完全對上(fairseq2 0.6.0 ↔ torch 2.8.0,Python ≤ 3.12),
+#   而 omnilingual-asr 要求 fairseq2 在 0.5.2–0.6.0 之間;裝進 tts 環境可能把 Matcha 的 torch 弄壞。
+# 為什麼從 GitHub 裝:PyPI 上的 omnilingual-asr 只有 0.1.0(只有 v1 模型卡 omniASR_LLM_1B 等);
+#   v2 模型卡(omniASR_LLM_1B_v2 等)只在 GitHub 的版本裡。
+set -euo pipefail
+source ~/miniconda3/etc/profile.d/conda.sh
+act() { set +u; conda activate "$1"; set -u; }
+
+free_gb=$(df -BG --output=avail "$HOME" | tail -1 | tr -dc 0-9)
+[ "$free_gb" -lt 30 ] && echo "★ 注意:家目錄只剩 ${free_gb} GB。環境約 8 GB、模型 8.5 GB(1B)到 17 GB(3B),建議至少留 30 GB。"
+ldconfig -p | grep -q libsndfile || echo "★ 找不到 libsndfile:先跑  sudo apt install -y libsndfile1"
+
+if conda env list | awk '{print $1}' | grep -qx asr; then
+  echo "環境 asr 已存在,沿用"
+else
+  conda create -y -n asr python=3.11
+fi
+act asr
+python -m pip install --upgrade pip
+pip install torch==2.8.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cu128
+pip install fairseq2==0.6.0 --extra-index-url https://fair.pkg.atmeta.com/fairseq2/whl/pt2.8.0/cu128
+pip install "git+https://github.com/facebookresearch/omnilingual-asr.git" || {
+  echo "★ 從 GitHub 安裝失敗,改用 PyPI 版(只有 v1 模型:跑的時候加  MODEL=omniASR_LLM_1B)"
+  pip install omnilingual-asr
+}
+pip install soundfile scipy numpy transformers accelerate    # 後三個:合成音檔轉 16k、報告、Whisper 後端
+
+python - <<'PY'
+import ctypes.util
+import importlib.metadata as md
+import pathlib
+
+import omnilingual_asr
+import torch
+from omnilingual_asr.models.inference.pipeline import ASRInferencePipeline  # noqa: F401
+
+print("torch", torch.__version__, "| cuda", torch.cuda.is_available(),
+      torch.cuda.get_device_name(0) if torch.cuda.is_available() else "")
+if torch.cuda.is_available():
+    x = torch.randn(64, 64, device="cuda")
+    print("GPU 運算測試:", float((x @ x).sum().isfinite()))        # RTX 50 系(sm_120)要 cu128 的 torch 才跑得動
+print("fairseq2", md.version("fairseq2"), "| omnilingual-asr", md.version("omnilingual-asr"))
+print("libsndfile:", ctypes.util.find_library("sndfile") or "★ 找不到(sudo apt install -y libsndfile1)")
+cards = pathlib.Path(omnilingual_asr.__file__).parent / "cards" / "models"
+text = "".join(p.read_text(encoding="utf-8") for p in cards.glob("*.yaml"))
+for name in ("omniASR_LLM_1B_v2", "omniASR_LLM_3B_v2", "omniASR_CTC_1B_v2", "omniASR_LLM_1B"):
+    print(f"模型卡 {name}:", "有" if f"name: {name}\n" in text else "沒有")
+PY
+echo
+echo "完成。接著:  DIALECTS=sixian NSENT=10 bash a1_run.sh   (先小試)"

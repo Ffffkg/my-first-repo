@@ -539,3 +539,147 @@ def test_g1_synth_features(tmp_path):
     assert c["word"].tolist() == ["siid5", "dong24"] and c["gen_seed"].tolist() == [1234, 1234]
     assert abs(2 ** c["p3"][0] - 120) < 6 and abs(2 ** c["p3"][1] - 220) < 8
     assert abs(c["dur_ms"][0] - 80) < 0.1 and c["entering"].tolist() == [1, 0]
+
+
+def _words_tg(words):
+    n = len(words) + 2
+    L = ['File type = "ooTextFile"', 'Object class = "TextGrid"', "", "xmin = 0", f"xmax = {n * 0.1:.1f}", "tiers? <exists>",
+         "size = 1", "item []:", "    item [1]:", '        class = "IntervalTier"', '        name = "words"', "        xmin = 0",
+         f"        xmax = {n * 0.1:.1f}", f"        intervals: size = {n}"]
+    for i, w in enumerate([""] + words + [""]):
+        L += [f"        intervals [{i + 1}]:", f"            xmin = {i * 0.1:.1f}", f"            xmax = {(i + 1) * 0.1:.1f}",
+              f'            text = "{w}"']
+    return "\n".join(L) + "\n"
+
+
+def test_a1_text_utils():
+    sys.path.insert(0, str(ROOT))
+    import a1_asr_check as A
+    assert A.letters("Sâd5") == "sad" and A.letters("ngiàn2") == "ngian"
+    assert A.with_marks("sàd") != A.with_marks("sad") and A.with_marks("sad 5!") == "sad5"
+    assert A.tokens("Sad5, ngin-ngin!") == ["sad5", "ngin", "ngin"]
+    assert A.lev("kitten", "sitting") == 3 and A.cer("abd", "abc") == pytest.approx(1 / 3)
+    assert A.align_tokens(["sad", "ngin", "kam"], ["sad", "kam"]) == [1.0, 0.0, 1.0]          # 被刪掉的 token = 0
+    assert A.align_tokens(["sad"], ["sat"])[0] == pytest.approx(2 / 3)
+
+
+def _a1_fake_rows(n=60):
+    """每句 5 個音節(入聲 sad5、gug5;舒聲 ngin2、kam24、ho31)。ok = 與真人相同;bad = 入聲字被削掉最後一個字母。"""
+    ref = {f"s{i}": ["sad5", "ngin2", "gug5", "kam24", "ho31"] for i in range(n)}
+    real = {st: "sad ngin gug kam ho" for st in ref}
+    syn = {}
+    for st in ref:
+        syn[("ok", 0, st)] = "sad ngin gug kam ho"
+        syn[("bad", 0, st)] = "sa ngin gu kam ho"
+    return ref, real, syn
+
+
+def test_a1_metrics_flag_degraded_entering_words():
+    sys.path.insert(0, str(ROOT))
+    import a1_asr_check as A
+    ref, real, syn = _a1_fake_rows()
+    M = A.per_stem_metrics(real, ref, syn)
+    assert np.allclose(list(M["ok"]["cer_letters"].values()), 0) and np.allclose(list(M["ok"]["ref_cer"].values()), 0)
+    assert all(v > 0 for v in M["bad"]["cer_letters"].values())
+    et = {s: sum(M[s]["num_et"].values()) / sum(M[s]["n_et"].values()) for s in M}
+    non = {s: sum(M[s]["num_non"].values()) / sum(M[s]["n_non"].values()) for s in M}
+    assert et["ok"] == 1 and non["ok"] == 1 and non["bad"] == 1
+    assert et["bad"] == pytest.approx(2 / 3)                          # sad→sa、gug→gu:各損失 1/3
+    text = A.build_report(M, ["ok", "bad"], "ok", 0.0, n_boot=200)
+    assert "## 2." in text and "可用句數 60" in text
+    # 入聲字 − 非入聲字 的點估計為負(bad 的入聲字比較吃虧);ok 為 0
+    row_bad = [ln for ln in text.splitlines() if ln.startswith("| bad |") and ln.count("|") == 6][-1]
+    assert row_bad.split("|")[-2].strip().startswith("-")
+    # 詞數對不上標準答案(ASR 把兩個字黏在一起)→ 第 2 項略過,第 1、3 項照常
+    real2 = {st: "sadngin gug kam ho" for st in ref}
+    M2 = A.per_stem_metrics(real2, ref, syn)
+    assert "num_et" not in M2["ok"]
+    text2 = A.build_report(M2, ["ok", "bad"], "ok", None, n_boot=200)
+    assert "這一項略過" in text2 and "## 1." in text2 and "## 3." in text2
+    assert "沒有任何可用" in A.build_report({}, ["ok"], "ok", None)
+
+
+def test_a1_to16k_and_reference_syllables(tmp_path, monkeypatch):
+    sys.path.insert(0, str(ROOT))
+    import a1_asr_check as A
+    import soundfile as sf
+    from hakka_c import config as C
+    sr = 22050
+    sf.write(tmp_path / "a.wav", 0.3 * np.sin(2 * np.pi * 220 * np.arange(sr) / sr), sr)
+    A.to16k(tmp_path / "a.wav", tmp_path / "out" / "a16.wav")
+    y, sr2 = sf.read(tmp_path / "out" / "a16.wav")
+    assert sr2 == 16000 and abs(len(y) - 16000) <= 2
+    monkeypatch.setattr(C, "HAKKA", tmp_path / "hakka")
+    d = C.textgrid_dir("sixian") / "XF"
+    d.mkdir(parents=True)
+    (d / "XF-1.TextGrid").write_text(_words_tg(["sad5", "ngin2", "sp", "gug5"]), encoding="utf-8")
+    assert A.reference_syllables("sixian", ["XF-1", "nope"]) == {"XF-1": ["sad5", "ngin2", "gug5"]}     # 靜音標籤不算音節
+
+
+def test_a1_run_end_to_end_with_fake_asr(tmp_path, monkeypatch):
+    """假的 ASR:只檢查檔案流程(找音檔、16k 快取、可續跑、只辨識新增的系統)與報告產出。"""
+    sys.path.insert(0, str(ROOT))
+    import a1_asr_check as A
+    from hakka_c import config as C
+    monkeypatch.setattr(C, "HAKKA", tmp_path / "hakka")
+    monkeypatch.setattr(C, "MATCHA", tmp_path / "matcha")
+    stems = [f"XF-{i}" for i in range(30)]
+    tg = C.textgrid_dir("sixian") / "XF"
+    tg.mkdir(parents=True)
+    fl = C.filelist("joint", "sixian", "test")
+    fl.parent.mkdir(parents=True)
+    (tmp_path / "real").mkdir()
+    for st in stems:
+        (tg / f"{st}.TextGrid").write_text(_words_tg(["sad5", "ngin2", "gug5", "kam24", "ho31"]), encoding="utf-8")
+        (tmp_path / "real" / f"{st}.wav").write_bytes(b"x")
+    fl.write_text("".join(f"{tmp_path / 'real' / (st + '.wav')}|0|text\n" for st in stems), encoding="utf-8")
+    for name in ("ok", "bad", "new"):
+        (tmp_path / name / "wav").mkdir(parents=True)
+        for st in stems:
+            (tmp_path / name / "wav" / f"{st}_g1234.wav").write_bytes(b"x")
+    def fake_to16k(src, dst):
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        dst.write_bytes(b"x")
+    monkeypatch.setattr(A, "to16k", fake_to16k)
+    calls = []
+
+    def fake_omni(files, model, lang, batch, chunk=64):
+        calls.append(len(files))
+        assert lang == "hak_Latn" and model == "fake-model"
+        return ["sa ngin gu kam ho" if f.parent.name.startswith("bad") else "sad ngin gug kam ho" for f in files]
+    monkeypatch.setattr(A, "transcribe_omni", fake_omni)
+
+    def run(*names):
+        argv = ["a1", "run", "--dialect", "sixian", "--out-dir", str(tmp_path / "out"), "--base", "ok", "--model", "fake-model",
+                "--n-boot", "100"]
+        for n in names:
+            argv += ["--sys", f"{n}={tmp_path / n}"]
+        monkeypatch.setattr(sys, "argv", argv)
+        A.main()
+    run("ok", "bad")
+    assert calls == [90]                                              # 30 句真人 + 2 個系統 × 30 句
+    rep = (tmp_path / "out" / "a1_omni_fake-model_hak_Latn_sixian.md").read_text(encoding="utf-8")
+    assert "可用句數 30" in rep and "| bad |" in rep and "辨識輸出範例" in rep
+    run("ok", "bad")
+    assert calls == [90]                                              # 全部做過了:不再呼叫 ASR
+    run("ok", "bad", "new")
+    assert calls == [90, 30]                                          # 只辨識新增的系統
+    n_rows = len(A.read_tsv_rows(tmp_path / "out" / "transcripts_omni_fake-model_hak_Latn.csv"))
+    assert n_rows == 30 * 4
+    monkeypatch.setattr(sys, "argv", ["a1", "analyze", "--dialect", "sixian", "--out-dir", str(tmp_path / "out"), "--base", "ok",
+                                      "--n-boot", "100", "--model", "fake-model"])
+    A.main()                                                          # analyze 只重算報告,不碰 ASR
+    assert calls == [90, 30]
+    monkeypatch.setattr(sys, "argv", ["a1", "analyze", "--dialect", "sixian", "--out-dir", str(tmp_path / "out"), "--model", "other"])
+    with pytest.raises(SystemExit):                                   # 換了模型 = 另一個辨識結果檔,不會讀到舊的
+        A.main()
+
+
+def test_a1_hanzi_output_is_tokenized_per_character():
+    """Whisper 客語微調版可能輸出漢字:一字一個 token,入聲位置照樣對得上。"""
+    sys.path.insert(0, str(ROOT))
+    import a1_asr_check as A
+    assert A.tokens("沙人谷甘好") == list("沙人谷甘好") and A.tokens("沙 ngin 谷") == ["沙", "ngin", "谷"]
+    ref = {"s0": ["sad5", "ngin2", "gug5", "kam24", "ho31"]}
+    M = A.per_stem_metrics({"s0": "沙人谷甘好"}, ref, {("bad", 0, "s0"): "沙人甘好"})      # 漏掉第 3 個字(入聲位置)
+    assert M["bad"]["n_et"]["s0"] == 2 and M["bad"]["num_et"]["s0"] == 1 and M["bad"]["num_non"]["s0"] == 3
