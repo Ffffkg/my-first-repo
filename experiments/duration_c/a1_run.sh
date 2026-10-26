@@ -6,6 +6,7 @@
 #   確認可用再完整跑:                                          bash a1_run.sh
 #   換模型:MODEL=omniASR_LLM_3B_v2 bash a1_run.sh              (預設 omniASR_LLM_1B_v2:約 6 GiB 顯存、下載 8.5 GiB)
 #   Whisper 客語微調版:BACKEND=whisper bash a1_run.sh          (預設模型 formospeech/whisper-large-v3-taiwanese-hakka)
+#   多辨識生成種子(信賴區間更窄,時間約為第一次的 N−1 倍):A1_GEN_SEEDS=1234,2345,3456 bash a1_run.sh
 # 用 GPU(要先跑過 a1_setup_env.sh)。辨識結果會存起來,中斷後直接重跑會接續;報告在 ~/hakka_tts/exp_c/a1/<腔調>/a1_*.md。
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -17,6 +18,7 @@ EXTRA=()
 [ -n "${MODEL:-}" ] && EXTRA+=(--model "$MODEL")
 [ -n "${NSENT:-}" ] && EXTRA+=(--n-sent "$NSENT")
 [ -n "${OMNI_LANG:-}" ] && EXTRA+=(--lang "$OMNI_LANG")       # 預設 hak_Latn;OMNI_LANG=none 表示不給語言碼
+[ -n "${A1_GEN_SEEDS:-}" ] && EXTRA+=(--gen-seeds "$A1_GEN_SEEDS")   # 多辨識幾個生成種子,例如 1234,2345,3456(已辨識的跳過)
 source ~/miniconda3/etc/profile.d/conda.sh
 act() { set +u; conda activate "$1"; set -u; }
 sfx() { [ "$1" = 1234 ] && echo "" || echo "_s$1"; }

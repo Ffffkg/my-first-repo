@@ -289,7 +289,8 @@ python e_analyze.py --key ~/hakka_tts/exp_e/hailu_base_vs_c2/key.csv  --response
 | `c11_mix.py` | C11:合併「目標腔 1h × R」與「來源腔 48h」的 MFA 時長清單 | 否 |
 | `c11_run.sh` | C11:C6 + 來源腔 48h 回放(聯合訓練),與 C6 比較 | 是 |
 | `c12_ens.sh` | C12:C6 三個種子的時長取 log 平均(c_eval.py --ens-exps)後合成,波形驗證 | 是(合成) |
-| `a1_asr_check.py` | A1:用語音辨識模型(Omnilingual ASR 的客語 `hak_Latn`,輸出為白話字拼寫;或 Whisper 客語微調版)當獨立於 MFA 的客觀檢查:辨識真人測試錄音與各系統合成語音,算「合成 vs 真人」辨識結果的 CER(字母層級 / 含聲調符號)、入聲字(辨識結果韻尾 -p/-t/-k)vs 其他字的逐字相似度、入聲保留率與其他字誤成入聲率、聲調記號一致率,另附對標準答案的 CER(含真人底線);辨識結果可續跑 | 是(ASR 模型) |
+| `a1_asr_check.py` | A1:用語音辨識模型(Omnilingual ASR 的客語 `hak_Latn`,輸出為白話字拼寫;或 Whisper 客語微調版)當獨立於 MFA 的客觀檢查:辨識真人測試錄音與各系統合成語音,算「合成 vs 真人」辨識結果的 CER(只比拉丁字母;真人辨識結果幾乎不是拉丁字母的句子整句排除)、入聲字(辨識結果韻尾 -p/-t/-k)vs 其他字的逐字相似度與差距、入聲保留率與其他字誤成入聲率、聲調記號一致率,報告最前面有各系統與 base 的差的摘要表;`pool` 合併兩個腔調,`--gen-seeds` 多辨識生成種子;辨識結果可續跑 | 是(ASR 模型) |
+| `a1_report.sh` | A1:用已辨識好的結果重算報告(不用 GPU):兩個腔調各一份加合併兩腔一份 | 否 |
 | `a1_setup_env.sh` | A1 前置:建立獨立的 conda 環境 `asr`(torch 2.8.0 cu128 + fairseq2 0.6.0 + conda 版 libsndfile 1.0.31 + 從 GitHub 釘版本裝 omnilingual-asr,v2 模型卡只在 GitHub 版;pyarrow < 26、transformers < 5,避開與 fairseq2 0.6 的 numpy / huggingface_hub 版本衝突),最後做環境檢查 | 否 |
 | `a1_run.sh` | A1 一鍵:找出 base / C2 / C6(三種子)與 48h 的評估資料夾,在 `asr` 環境辨識並出報告(`DIALECTS=sixian NSENT=10` 先小試) | 是 |
 | `c3_target_check.py` | C3 前置診斷:C2 母音核偏差拆成 訓練目標 / blank 靜音 / 預測器 / 取整 | 是(只跑編碼器) |
