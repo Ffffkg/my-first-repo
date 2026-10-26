@@ -290,7 +290,7 @@ python e_analyze.py --key ~/hakka_tts/exp_e/hailu_base_vs_c2/key.csv  --response
 | `c11_run.sh` | C11:C6 + 來源腔 48h 回放(聯合訓練),與 C6 比較 | 是 |
 | `c12_ens.sh` | C12:C6 三個種子的時長取 log 平均(c_eval.py --ens-exps)後合成,波形驗證 | 是(合成) |
 | `a1_asr_check.py` | A1:用語音辨識模型(Omnilingual ASR 的客語 `hak_Latn`,或 Whisper 客語微調版)當獨立於 MFA 的客觀檢查:辨識真人測試錄音與各系統合成語音,算「合成 vs 真人」辨識結果的 CER(字母層級 / 含聲調符號)、入聲字 vs 非入聲字的一致度、對標準答案的 CER(附真人底線);辨識結果可續跑 | 是(ASR 模型) |
-| `a1_setup_env.sh` | A1 前置:建立獨立的 conda 環境 `asr`(torch 2.8.0 cu128 + fairseq2 0.6.0 + 從 GitHub 裝 omnilingual-asr,v2 模型卡只在 GitHub 版),最後做環境檢查 | 否 |
+| `a1_setup_env.sh` | A1 前置:建立獨立的 conda 環境 `asr`(torch 2.8.0 cu128 + fairseq2 0.6.0 + conda 版 libsndfile 1.0.31 + 從 GitHub 釘版本裝 omnilingual-asr,v2 模型卡只在 GitHub 版;transformers 釘在 4.x),最後做環境檢查 | 否 |
 | `a1_run.sh` | A1 一鍵:找出 base / C2 / C6(三種子)與 48h 的評估資料夾,在 `asr` 環境辨識並出報告(`DIALECTS=sixian NSENT=10` 先小試) | 是 |
 | `c3_target_check.py` | C3 前置診斷:C2 母音核偏差拆成 訓練目標 / blank 靜音 / 預測器 / 取整 | 是(只跑編碼器) |
 | `c3_fit_pp.py` | C3a:在驗證集估停頓前母音核縮放 s_pp(c_eval / d1_pipeline 用 `--s-pp`) | 否 |

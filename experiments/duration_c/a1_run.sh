@@ -29,6 +29,12 @@ dirs_of() {   # 系統 腔 → 逗號分隔的評估資料夾(各訓練種子;ce
   done
   echo "${out%,}"
 }
+if [ "$BACKEND" = omni ]; then       # 先確認 asr 環境能 import(a1_setup_env.sh 沒跑完的話,在這裡就停,不要先花時間轉檔)
+  act asr
+  if ! python -c "import omnilingual_asr" 2> /tmp/a1_import.err; then
+    echo "★ asr 環境裡 import omnilingual_asr 失敗,請先把 a1_setup_env.sh 跑完。錯誤的最後幾行:"; tail -4 /tmp/a1_import.err; exit 1
+  fi
+fi
 for d in $DIALECTS; do
   act tts
   args=()
