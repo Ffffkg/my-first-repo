@@ -683,3 +683,32 @@ def test_a1_hanzi_output_is_tokenized_per_character():
     ref = {"s0": ["sad5", "ngin2", "gug5", "kam24", "ho31"]}
     M = A.per_stem_metrics({"s0": "沙人谷甘好"}, ref, {("bad", 0, "s0"): "沙人甘好"})      # 漏掉第 3 個字(入聲位置)
     assert M["bad"]["n_et"]["s0"] == 2 and M["bad"]["num_et"]["s0"] == 1 and M["bad"]["num_non"]["s0"] == 3
+
+
+def test_a1_transcribe_omni_call_shape(monkeypatch):
+    """假的 omnilingual_asr:檢查我們呼叫官方介面的方式(模型卡、每個檔一個語言碼、分批、回傳字串)。"""
+    import types
+    sys.path.insert(0, str(ROOT))
+    import a1_asr_check as A
+    seen = {"cards": [], "calls": []}
+
+    class FakePipe:
+        def __init__(self, model_card=None, **kw):
+            seen["cards"].append(model_card)
+
+        def transcribe(self, inp, *, lang=None, batch_size=2):
+            seen["calls"].append((list(inp), lang, batch_size))
+            assert lang is None or len(lang) == len(inp)
+            return [f"hyp:{Path(f).stem}" for f in inp]
+    mods = {}
+    for name in ("omnilingual_asr", "omnilingual_asr.models", "omnilingual_asr.models.inference", "omnilingual_asr.models.inference.pipeline"):
+        mods[name] = types.ModuleType(name)
+        monkeypatch.setitem(sys.modules, name, mods[name])
+    mods["omnilingual_asr.models.inference.pipeline"].ASRInferencePipeline = FakePipe
+    files = [Path(f"/x/{i}.wav") for i in range(5)]
+    out = A.transcribe_omni(files, "omniASR_LLM_1B_v2", "hak_Latn", 4, chunk=2)
+    assert out == [f"hyp:{i}" for i in range(5)] and seen["cards"] == ["omniASR_LLM_1B_v2"]
+    assert [len(c[0]) for c in seen["calls"]] == [2, 2, 1] and all(c[1] == ["hak_Latn"] * len(c[0]) and c[2] == 4 for c in seen["calls"])
+    seen["calls"].clear()
+    A.transcribe_omni(files, "m", "none", 4)
+    assert seen["calls"][0][1] is None

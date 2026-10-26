@@ -16,6 +16,7 @@ BACKEND=${BACKEND:-omni}
 EXTRA=()
 [ -n "${MODEL:-}" ] && EXTRA+=(--model "$MODEL")
 [ -n "${NSENT:-}" ] && EXTRA+=(--n-sent "$NSENT")
+[ -n "${OMNI_LANG:-}" ] && EXTRA+=(--lang "$OMNI_LANG")       # 預設 hak_Latn;OMNI_LANG=none 表示不給語言碼
 source ~/miniconda3/etc/profile.d/conda.sh
 act() { set +u; conda activate "$1"; set -u; }
 sfx() { [ "$1" = 1234 ] && echo "" || echo "_s$1"; }

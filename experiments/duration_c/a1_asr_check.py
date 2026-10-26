@@ -273,12 +273,13 @@ def to16k(src, dst):
 
 
 def transcribe_omni(files, model, lang, batch, chunk=64):
+    """lang = 'none':不給語言碼(LLM 模型會自己判斷;官方說這樣品質可能較差,只用來診斷語言設定有沒有影響)。"""
     from omnilingual_asr.models.inference.pipeline import ASRInferencePipeline
     pipe = ASRInferencePipeline(model_card=model)
     out = []
     for i in range(0, len(files), chunk):
         part = [str(f) for f in files[i:i + chunk]]
-        res = pipe.transcribe(part, lang=[lang] * len(part), batch_size=batch)
+        res = pipe.transcribe(part, lang=None if lang.lower() in ("none", "") else [lang] * len(part), batch_size=batch)
         out += [r if isinstance(r, str) else str(r.get("text", r)) if isinstance(r, dict) else str(r) for r in res]
         print(f"  已辨識 {min(i + chunk, len(files))}/{len(files)}")
     return out
@@ -410,7 +411,7 @@ def main():
         p.add_argument("--base", default="base", help="比較基準的系統名稱")
         p.add_argument("--n-boot", type=int, default=5000)
         p.add_argument("--model", help=f"omni:模型卡名稱(預設 {DEFAULT_MODEL['omni']});whisper:Hugging Face 模型 id(預設 {DEFAULT_MODEL['whisper']})")
-        p.add_argument("--lang", default="hak_Latn", help="omni 的語言代碼")
+        p.add_argument("--lang", default="hak_Latn", help="omni 的語言代碼;none = 不給語言碼")
         p.add_argument("--whisper-lang", default=None)
         if name == "run":
             p.add_argument("--sys", action="append", required=True, metavar="NAME=DIR1,DIR2,...",
