@@ -7,9 +7,11 @@
 #   而 omnilingual-asr 要求 fairseq2 在 0.5.2–0.6.0 之間;裝進 tts 環境可能把 Matcha 的 torch 弄壞。
 # 為什麼從 GitHub 裝:PyPI 上的 omnilingual-asr 只有 0.1.0(只有 v1 模型卡 omniASR_LLM_1B 等);
 #   v2 模型卡(omniASR_LLM_1B_v2 等)只在 GitHub 的版本裡。
-set -euo pipefail
+# kenlm(語言模型解碼用,我們用不到)在新版編譯器上可能編譯失敗;失敗時會自動改成不裝 kenlm 再試。
+set -uo pipefail
 source ~/miniconda3/etc/profile.d/conda.sh
 act() { set +u; conda activate "$1"; set -u; }
+must() { "$@" || { echo "★ 失敗:$*"; exit 1; }; }
 
 free_gb=$(df -BG --output=avail "$HOME" | tail -1 | tr -dc 0-9)
 [ "$free_gb" -lt 30 ] && echo "★ 注意:家目錄只剩 ${free_gb} GB。環境約 8 GB、模型 8.5 GB(1B)到 17 GB(3B),建議至少留 30 GB。"
@@ -18,19 +20,26 @@ ldconfig -p | grep -q libsndfile || echo "★ 找不到 libsndfile:先跑  sudo 
 if conda env list | awk '{print $1}' | grep -qx asr; then
   echo "環境 asr 已存在,沿用"
 else
-  conda create -y -n asr python=3.11
+  must conda create -y -n asr --override-channels -c conda-forge python=3.11      # 只用 conda-forge:不會碰到 Anaconda 預設頻道的條款確認
 fi
 act asr
-python -m pip install --upgrade pip
-pip install torch==2.8.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cu128
-pip install fairseq2==0.6.0 --extra-index-url https://fair.pkg.atmeta.com/fairseq2/whl/pt2.8.0/cu128
-pip install "git+https://github.com/facebookresearch/omnilingual-asr.git" || {
-  echo "★ 從 GitHub 安裝失敗,改用 PyPI 版(只有 v1 模型:跑的時候加  MODEL=omniASR_LLM_1B)"
-  pip install omnilingual-asr
-}
-pip install soundfile scipy numpy transformers accelerate    # 後三個:合成音檔轉 16k、報告、Whisper 後端
+must python -m pip install --upgrade pip
+must pip install torch==2.8.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cu128
+must pip install fairseq2==0.6.0 --extra-index-url https://fair.pkg.atmeta.com/fairseq2/whl/pt2.8.0/cu128
 
-python - <<'PY'
+install_omni() {   # $1 = pip 的來源。先完整安裝;失敗(多半是 kenlm 編譯失敗)就不裝相依套件,手動補上除了 kenlm 以外的
+  pip install "$1" && return 0
+  echo "★ 完整安裝失敗,改成不裝 kenlm 再試一次(只做辨識,用不到語言模型解碼)"
+  pip install --no-deps "$1" && pip install "pyarrow>=20.0.0" numba pandas numpy "polars>=1.29.0" \
+    "fairseq2[arrow]==0.6.0" --extra-index-url https://fair.pkg.atmeta.com/fairseq2/whl/pt2.8.0/cu128
+}
+if ! install_omni "git+https://github.com/facebookresearch/omnilingual-asr.git"; then
+  echo "★ 從 GitHub 安裝失敗,改用 PyPI 版(只有 v1 模型:跑的時候加  MODEL=omniASR_LLM_1B)"
+  must install_omni omnilingual-asr
+fi
+must pip install soundfile scipy numpy transformers accelerate    # 後三個:合成音檔轉 16k、報告、Whisper 後端
+
+must python - <<'PY'
 import ctypes.util
 import importlib.metadata as md
 import pathlib
