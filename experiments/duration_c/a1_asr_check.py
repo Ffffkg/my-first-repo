@@ -212,6 +212,8 @@ def build_report(M, order, base, n_boot=5000, n_excluded=0):
         return "(各系統沒有共同的句子可比較。)"
     ex = f"(另有 {n_excluded} 句因為真人錄音的辨識結果幾乎不是拉丁字母〔多半是辨識幻覺〕而排除)" if n_excluded else ""
     L += [f"共同句數 {len(common)} 句{ex}。CI = 以句子重抽 {n_boot} 次的 95% 區間;「與 {base} 的差」為同一批句子的配對差。\n"]
+    if "copy" in order:
+        L += ["`copy` = 真人錄音的真實 mel 直接過同一個 HiFi-GAN 重建(聲學模型與時長都完美時的天花板);其他系統要跟它比,才知道還有多少進步空間。\n"]
     idx = boot_idx(len(common), n_boot)
 
     def arr(s, key, stems=common):

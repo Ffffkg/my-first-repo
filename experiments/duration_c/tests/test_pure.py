@@ -626,6 +626,17 @@ def test_a1_metrics_flag_degraded_entering_words():
     assert "沒有任何可用" in A.build_report({}, ["ok"], "ok")
 
 
+def test_a1_report_explains_copy_ceiling_row():
+    sys.path.insert(0, str(ROOT))
+    import a1_asr_check as A
+    ref_n, real, syn = _a1_fake_rows(40)
+    syn.update({("copy", "0", st): REAL_PFS for st in ref_n})
+    M = A.per_stem_metrics(real, ref_n, syn)
+    text = A.build_report(M, ["ok", "bad", "copy"], "ok", n_boot=100)
+    assert "天花板" in text and "| copy |" in text
+    assert "天花板" not in A.build_report(M, ["ok", "bad"], "ok", n_boot=100)
+
+
 def test_a1_unreliable_real_transcripts_are_excluded():
     """整句被辨識成泰文 / 漢字數字的真人錄音,不能當參考答案(否則 CER 的分母趨近 0 而爆表),整句排除。"""
     sys.path.insert(0, str(ROOT))
