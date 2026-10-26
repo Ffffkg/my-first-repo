@@ -34,6 +34,7 @@ python - <<'PY'
 import ctypes.util
 import importlib.metadata as md
 import pathlib
+import re
 
 import omnilingual_asr
 import torch
@@ -49,7 +50,7 @@ print("libsndfile:", ctypes.util.find_library("sndfile") or "★ 找不到(sudo 
 cards = pathlib.Path(omnilingual_asr.__file__).parent / "cards" / "models"
 text = "".join(p.read_text(encoding="utf-8") for p in cards.glob("*.yaml"))
 for name in ("omniASR_LLM_1B_v2", "omniASR_LLM_3B_v2", "omniASR_CTC_1B_v2", "omniASR_LLM_1B"):
-    print(f"模型卡 {name}:", "有" if f"name: {name}\n" in text else "沒有")
+    print(f"模型卡 {name}:", "有" if re.search(rf"^name:\s*{name}\s*$", text, re.M) else "沒有")
 PY
 echo
 echo "完成。接著:  DIALECTS=sixian NSENT=10 bash a1_run.sh   (先小試)"
