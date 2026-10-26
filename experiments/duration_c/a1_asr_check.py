@@ -3,14 +3,16 @@
 為什麼:我們所有時長指標都靠 MFA 量。這裡改用一個完全不同的系統(Meta Omnilingual ASR,有 hak_Latn 客語;
 也可選 Whisper 客語微調)去「聽」合成語音,看辨識結果跟聽真人錄音的結果差多少。
 
-三個指標(都是越低 / 越高越好,見報告內說明):
-  1. 一致度 CER:ASR(合成)對 ASR(同一句真人錄音)的字元錯誤率。不需要知道 ASR 用哪種拼寫,兩邊都是它自己的輸出。
-       字母層級 = 忽略聲調符號與數字;含聲調符號 = 聲調符號、數字也算。
-  2. 入聲字一致度:用標準答案(TextGrid 的客語拼音音節)決定哪些位置是入聲(-b/-d/-g),
-       再看 ASR(真人)在那些位置的詞,被 ASR(合成)保留了多少(0–1)。需要 ASR 輸出以音節/詞分隔,
-       且詞數與標準答案相同的句子(報告會列出可用句數);不滿足就只給 1.、3.。
-  3. 對標準答案的 CER(僅供參考):若 ASR 的拼寫與客語拼音不同,這個數字會被拼寫差異墊高,
-       所以一定要看「真人錄音」那一列當底線。
+試跑看到的事實(omniASR_LLM_1B_v2 + hak_Latn):輸出是白話字(Pha̍k-fa-sṳ)拼寫,音節間用連字號,有聲調符號
+(例:pûn-ngìn kit-tó),入聲韻尾寫 -p/-t/-k(我們的客語拼音是 -b/-d/-g);偶爾冒出漢字、韓文、阿拉伯數字(辨識幻覺)。
+所以所有指標都是「ASR(合成)對 ASR(同一句真人錄音)」,不依賴 ASR 的拼寫與標準答案一致;幻覺字元會被忽略。
+
+四個指標(見報告內說明):
+  1. 一致度 CER:ASR(合成)對 ASR(真人)的字元錯誤率。字母層級 = 忽略聲調符號與數字;含聲調符號 = 聲調符號也算。
+  2. 入聲字 vs 其他字:入聲字 = 真人辨識結果裡韻尾是 -p/-t/-k 的字。把兩邊的辨識結果逐字對齊,看
+       (a) 字的相似度,(b) 入聲保留率(真人聽成入聲的字,合成語音也聽成入聲)與其他字誤成入聲率。
+  3. 聲調記號一致率:對得上的字之中,聲調記號(^ ` ´ ̍ 或無)與真人相同的比例。
+  4. 對標準答案的 CER(僅供參考:拼寫不同會墊高,看「真人錄音」那一列當底線)。
 
     python a1_asr_check.py run --dialect sixian --backend omni --model omniASR_LLM_1B_v2 \\
         --sys base=$E/base_sixian_step40000,... --sys c6=... --out-dir ~/hakka_tts/exp_c/a1/sixian
@@ -33,7 +35,6 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from hakka_c import config as C  # noqa: E402
 from hakka_c.stats import boot_idx  # noqa: E402
-from hakka_c.structure import is_entering_syllable  # noqa: E402
 from hakka_c.textgrid import find_tier, read_textgrid  # noqa: E402
 
 PUNCT = re.compile(r"[\s\-–—_.,;:!?\"'“”‘’()\[\]{}<>…、，。！？；：·/\\|]+")
@@ -89,8 +90,29 @@ def ref_letters(refs):
     return "".join(re.sub(r"\d+", "", s) for s in refs).lower()
 
 
-def align_tokens(ref, hyp):
-    """ref、hyp:已正規化的 token 列。回傳每個 ref token 的相似度(0–1,被刪掉 = 0)。"""
+TONE_MARKS = set("\u0300\u0301\u0302\u0303\u0304\u030c\u030d")   # 重音 ` 、銳音 ´ 、揚抑符 ^ 、~ 、長音符 ¯ 、ˇ 、上方豎線 ̍(ṳ 的下加分音符 U+0324 是字母的一部分,不算)
+MATCH_SIM = 0.5                       # 對齊後字母相似度達此值,才算「對得上」的字
+COUNT_KEYS = ("n_et", "n_non", "sim_et", "sim_non", "m_et", "m_non", "tone_et", "tone_non", "kept_et", "false_non")
+
+
+def tone_of(tok):
+    """token 的聲調記號(只認 TONE_MARKS);沒有記號 = ''。"""
+    d = unicodedata.normalize("NFD", unicodedata.normalize("NFKC", tok).lower())
+    return "".join(sorted(c for c in d if c in TONE_MARKS))
+
+
+def latin_tokens(s):
+    """辨識輸出 → [(a–z 字母, 聲調記號)];只留拉丁字母的 token(數字、漢字、韓文等辨識幻覺忽略)。"""
+    return [(let, tone_of(t)) for t in tokens(s) for let in [letters(t)] if re.fullmatch(r"[a-z]+", let)]
+
+
+def ends_stop(let):
+    """白話字的入聲:韻尾 -p / -t / -k。"""
+    return let[-1] in "ptk"
+
+
+def align_pairs(ref, hyp):
+    """ref、hyp:token 字串列。回傳每個 ref token 一筆 (對到的 hyp 位置 或 None, 相似度 0–1);被刪掉 = (None, 0.0)。"""
     n, m = len(ref), len(hyp)
     D = [[0.0] * (m + 1) for _ in range(n + 1)]
     B = [[0] * (m + 1) for _ in range(n + 1)]
@@ -105,38 +127,56 @@ def align_tokens(ref, hyp):
             sub_cost[i, j] = c
             opts = ((D[i - 1][j - 1] + c, 1), (D[i - 1][j] + 1.0, 2), (D[i][j - 1] + 1.0, 3))
             D[i][j], B[i][j] = min(opts, key=lambda t: t[0])
-    sims = [0.0] * n
+    out = [(None, 0.0)] * n
     i, j = n, m
     while i > 0 or j > 0:
         b = B[i][j]
         if b == 1:
-            sims[i - 1] = 1.0 - sub_cost[i, j]
+            out[i - 1] = (j - 1, 1.0 - sub_cost[i, j])
             i, j = i - 1, j - 1
         elif b == 2:
             i -= 1
         else:
             j -= 1
-    return sims
+    return out
+
+
+def align_tokens(ref, hyp):
+    """每個 ref token 的相似度(0–1,被刪掉 = 0)。"""
+    return [sim for _, sim in align_pairs(ref, hyp)]
 
 
 # ------------------------------------------------------------------ 逐句指標與報告
+def token_counts(real, hyp):
+    """真人與合成語音的辨識結果逐字對齊,數入聲 / 非入聲字的相似度、入聲保留、聲調記號一致(COUNT_KEYS)。
+    入聲字 = 真人辨識結果裡韻尾是 -p / -t / -k 的字。"""
+    rt, ht = latin_tokens(real), latin_tokens(hyp)
+    cnt = dict.fromkeys(COUNT_KEYS, 0.0)
+    for i, (j, sim) in enumerate(align_pairs([x[0] for x in rt], [x[0] for x in ht])):
+        c = "et" if ends_stop(rt[i][0]) else "non"
+        cnt[f"n_{c}"] += 1
+        cnt[f"sim_{c}"] += sim
+        if j is not None and sim >= MATCH_SIM:
+            cnt[f"m_{c}"] += 1
+            cnt[f"tone_{c}"] += rt[i][1] == ht[j][1]
+            if c == "et":
+                cnt["kept_et"] += ends_stop(ht[j][0])
+            else:
+                cnt["false_non"] += ends_stop(ht[j][0])
+    return cnt
+
+
 def per_stem_metrics(real_hyp, ref_syl, syn_hyp):
     """syn_hyp: {(sys, k, stem): str}。回傳 {sys: {metric: {stem: 各種子平均}}}。"""
     acc = {}
     for (sysname, k, stem), hyp in syn_hyp.items():
         real = real_hyp.get(stem, "")
-        refs = ref_syl.get(stem)
-        if not real.strip() or not refs:
+        if not real.strip():
             continue
-        m = {"cer_letters": cer(letters(hyp), letters(real)), "cer_marks": cer(with_marks(hyp), with_marks(real)),
-             "ref_cer": cer(letters(hyp), ref_letters(refs))}
-        rt = [t for t in (letters(t) for t in tokens(real)) if t]
-        if len(rt) == len(refs):
-            ht = [t for t in (letters(t) for t in tokens(hyp)) if t]
-            sims = align_tokens(rt, ht)
-            et = [is_entering_syllable(s) is True for s in refs]
-            m.update(num_et=sum(s for s, e in zip(sims, et) if e), n_et=sum(et),
-                     num_non=sum(s for s, e in zip(sims, et) if not e), n_non=len(et) - sum(et))
+        m = {"cer_letters": cer(letters(hyp), letters(real)), "cer_marks": cer(with_marks(hyp), with_marks(real))}
+        if ref_syl.get(stem):
+            m["ref_cer"] = cer(letters(hyp), ref_letters(ref_syl[stem]))
+        m.update(token_counts(real, hyp))
         for key, v in m.items():
             acc.setdefault(sysname, {}).setdefault(key, {}).setdefault(stem, []).append(v)
     return {s: {key: {st: float(np.mean(v)) for st, v in d.items()} for key, d in ms.items()} for s, ms in acc.items()}
@@ -157,63 +197,89 @@ def build_report(M, order, base, real_floor, n_boot=5000):
     L = []
     order = [s for s in order if s in M]
     if not order:
-        return "(沒有任何可用的辨識結果:真人或合成的輸出是空的,或找不到標準答案。)"
+        return "(沒有任何可用的辨識結果:真人或合成的輸出是空的。)"
     common = sorted(set.intersection(*[set(M[s]["cer_letters"]) for s in order]))
     if not common:
         return "(各系統沒有共同的句子可比較。)"
     L += [f"共同句數 {len(common)} 句。CI = 以句子重抽 {n_boot} 次的 95% 區間;「與 {base} 的差」為同一批句子的配對差。\n"]
     idx = boot_idx(len(common), n_boot)
 
-    def arr(s, key, stems):
+    def arr(s, key, stems=common):
         return np.array([M[s][key][t] for t in stems])
+
+    def ratio(s, nums, dens):
+        """比例 = 分子總和 / 分母總和(跨句子加總);回傳 (點估計, 句子重抽的 draws)。"""
+        n = sum(arr(s, k) for k in ((nums,) if isinstance(nums, str) else nums))
+        d = sum(arr(s, k) for k in ((dens,) if isinstance(dens, str) else dens))
+        return n.sum() / max(d.sum(), 1e-9), n[idx].sum(axis=1) / np.maximum(d[idx].sum(axis=1), 1e-9)
+
+    def cells(s, nums, dens):
+        """[CI 字串, 與 base 的差]"""
+        p, d = ratio(s, nums, dens)
+        if base in M and s != base:
+            pb, db = ratio(base, nums, dens)
+            return [ci_str(p, d), diff_str(p - pb, d - db)]
+        return [ci_str(p, d), "—"]
 
     # 1. 一致度 CER
     L += ["## 1. 與「真人錄音的辨識結果」的一致度(CER %,越低越好)\n",
           f"| 系統 | 字母層級 CER | 與 {base} 的差 | 含聲調符號 CER | 與 {base} 的差 |", "|---|---|---|---|---|"]
     for s in order:
-        cells = []
+        row = []
         for key in ("cer_letters", "cer_marks"):
-            x = arr(s, key, common)
-            cells.append(ci_str(x.mean(), x[idx].mean(axis=1)))
+            x = arr(s, key)
+            row.append(ci_str(x.mean(), x[idx].mean(axis=1)))
             if base in M and s != base:
-                d = x - arr(base, key, common)
-                cells.append(diff_str(d.mean(), d[idx].mean(axis=1)))
+                d = x - arr(base, key)
+                row.append(diff_str(d.mean(), d[idx].mean(axis=1)))
             else:
-                cells.append("—")
-        L.append(f"| {s} | {cells[0]} | {cells[1]} | {cells[2]} | {cells[3]} |")
+                row.append("—")
+        L.append(f"| {s} | " + " | ".join(row) + " |")
 
-    # 2. 入聲字一致度
-    el = sorted(set.intersection(*[set(M[s].get("n_et", {})) for s in order]))
-    L += ["", "## 2. 入聲字 vs 非入聲字的一致度(0–100,越高越好)\n"]
-    if len(el) < 20:
-        L.append(f"(可用句數只有 {len(el)} 句:ASR 輸出的詞數與標準答案的音節數不一致的句子太多,這一項略過。)")
+    # 2. 入聲字 vs 非入聲字
+    n_et, n_non = arr(order[0], "n_et").sum(), arr(order[0], "n_non").sum()
+    L += ["", "## 2. 入聲字 vs 其他字(入聲字 = 真人錄音的辨識結果裡,韻尾是 -p / -t / -k 的字)\n",
+          f"真人辨識結果共 {n_et:.0f} 個入聲字、{n_non:.0f} 個其他字(多個訓練種子取平均)。"]
+    if n_et < 30:
+        L.append("入聲字太少,這一節略過。")
     else:
-        idx2 = boot_idx(len(el), n_boot, seed=43)
-        L += [f"可用句數 {len(el)}(ASR 真人輸出的詞數 = 標準答案音節數)。",
-              f"\n| 系統 | 入聲字 | 非入聲字 | 入聲字與 {base} 的差 | 入聲字 − 非入聲字 |", "|---|---|---|---|---|"]
-        a = {s: {k: arr(s, k, el) for k in ("num_et", "n_et", "num_non", "n_non")} for s in order}
+        L += ["\n**2a. 字的相似度**(合成語音的辨識結果與真人的逐字對齊後,同一個字的字母相似度 0–100;被聽漏的算 0;越高越好)\n",
+              f"| 系統 | 入聲字 | 其他字 | 入聲字與 {base} 的差 | 入聲字 − 其他字 |", "|---|---|---|---|---|"]
         for s in order:
-            x = a[s]
-            et = x["num_et"][idx2].sum(axis=1) / np.maximum(x["n_et"][idx2].sum(axis=1), 1)
-            non = x["num_non"][idx2].sum(axis=1) / np.maximum(x["n_non"][idx2].sum(axis=1), 1)
-            p_et, p_non = x["num_et"].sum() / max(x["n_et"].sum(), 1), x["num_non"].sum() / max(x["n_non"].sum(), 1)
-            if base in a and s != base:
-                b = a[base]
-                bet = b["num_et"][idx2].sum(axis=1) / np.maximum(b["n_et"][idx2].sum(axis=1), 1)
-                dif = diff_str(p_et - b["num_et"].sum() / max(b["n_et"].sum(), 1), et - bet)
-            else:
-                dif = "—"
-            L.append(f"| {s} | {ci_str(p_et, et)} | {ci_str(p_non, non)} | {dif} | {diff_str(p_et - p_non, et - non)} |")
-        L.append("\n「入聲字 − 非入聲字」為負:入聲字比非入聲字更常被辨識錯;越接近 0 表示入聲沒有特別吃虧。")
+            pe, de = ratio(s, "sim_et", "n_et")
+            pn, dn = ratio(s, "sim_non", "n_non")
+            dif = "—"
+            if base in M and s != base:
+                pb, db = ratio(base, "sim_et", "n_et")
+                dif = diff_str(pe - pb, de - db)
+            L.append(f"| {s} | {ci_str(pe, de)} | {ci_str(pn, dn)} | {dif} | {diff_str(pe - pn, de - dn)} |")
+        L.append("\n「入聲字 − 其他字」為負:入聲字比其他字更常被聽走樣;越接近 0 表示入聲沒有特別吃虧。")
+        L += ["\n**2b. 入聲有沒有被聽成入聲**(入聲保留率 = 真人聽成入聲的字,合成語音也聽成入聲〔韻尾 -p/-t/-k〕的比例,聽漏的算沒保留;"
+              "其他字誤成入聲率 = 真人聽成其他字,合成語音卻聽出 -p/-t/-k 的比例)\n",
+              f"| 系統 | 入聲保留率(越高越好) | 與 {base} 的差 | 其他字誤成入聲率(越低越好) | 與 {base} 的差 |", "|---|---|---|---|---|"]
+        for s in order:
+            L.append("| " + " | ".join([s] + cells(s, "kept_et", "n_et") + cells(s, "false_non", "m_non")) + " |")
 
-    # 3. 對標準答案的 CER
-    L += ["", "## 3. 對標準答案(客語拼音)的 CER(%,僅供參考:ASR 拼寫與客語拼音不同時會被墊高)\n",
-          "| 系統 | 字母層級 CER |", "|---|---|"]
+    # 3. 聲調記號一致率
+    L += ["", "## 3. 聲調記號一致率(%,越高越好)\n",
+          f"對得上的字(字母相似度 ≥ {MATCH_SIM})之中,合成語音辨識出的聲調記號和真人的相同的比例(記號包含「無記號」)。\n",
+          f"| 系統 | 全部 | 與 {base} 的差 | 入聲字 | 其他字 |", "|---|---|---|---|---|"]
+    for s in order:
+        L.append("| " + " | ".join([s] + cells(s, ("tone_et", "tone_non"), ("m_et", "m_non"))
+                                   + [cells(s, "tone_et", "m_et")[0], cells(s, "tone_non", "m_non")[0]]) + " |")
+
+    # 4. 對標準答案的 CER
+    rc = [t for t in common if all(t in M[s].get("ref_cer", {}) for s in order)]
+    L += ["", "## 4. 對標準答案(客語拼音)的 CER(%,僅供參考)\n",
+          "ASR 用白話字拼寫(p/t/k、ph/th/kh、ṳ…),標準答案是客語拼音(b/d/g、p/t/k、ii…),拼寫不同,所以數字會被墊高;"
+          "只看系統之間的相對差,並以「真人錄音」那一列當底線。\n", "| 系統 | 字母層級 CER |", "|---|---|"]
     if real_floor is not None:
         L.append(f"| **真人錄音(底線)** | {100 * real_floor:.1f} |")
-    for s in order:
-        x = arr(s, "ref_cer", common)
-        L.append(f"| {s} | {ci_str(x.mean(), x[idx].mean(axis=1))} |")
+    if rc:
+        idx_r = boot_idx(len(rc), n_boot, seed=44)
+        for s in order:
+            x = arr(s, "ref_cer", rc)
+            L.append(f"| {s} | {ci_str(x.mean(), x[idx_r].mean(axis=1))} |")
     return "\n".join(L)
 
 
@@ -313,11 +379,10 @@ def show_examples(stems, ref_syl, real_hyp, syn_hyp, order, n=6):
     chars = "".join(sorted({c for h in real_hyp.values() for c in h}))
     n_tok = [len(tokens(h)) for h in real_hyp.values()]
     n_ref = [len(ref_syl.get(st, [])) for st in real_hyp]
-    same = [a == b for a, b in zip(n_tok, n_ref) if b]
-    L += ["", f"真人輸出用到的字元:{chars!r}"]
-    if same:
-        L.append(f"每句平均詞數:ASR {np.mean(n_tok):.1f}、標準答案音節 {np.mean(n_ref):.1f};"
-                 f"詞數與音節數相同的句子 {100 * np.mean(same):.0f}%\n")
+    odd = np.mean([bool(re.search(rf"[{CJK}\uac00-\ud7af0-9]", h)) for h in real_hyp.values()])
+    L += ["", f"真人輸出用到的字元:{chars!r}",
+          f"每句平均詞數:ASR {np.mean(n_tok):.1f}、標準答案音節 {np.mean(n_ref):.1f};"
+          f"真人辨識結果含漢字 / 韓文 / 數字(多半是辨識幻覺,指標會忽略這些字)的句子 {100 * odd:.0f}%\n"]
     return "\n".join(L)
 
 

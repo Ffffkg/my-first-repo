@@ -563,15 +563,28 @@ def test_a1_text_utils():
     assert A.align_tokens(["sad"], ["sat"])[0] == pytest.approx(2 / 3)
 
 
+REAL_PFS = "sàt ngîn kuk kám hó"            # 假的真人辨識結果(白話字風格):入聲字 sàt、kuk,其他字 ngîn、kám、hó
+
+
 def _a1_fake_rows(n=60):
-    """每句 5 個音節(入聲 sad5、gug5;舒聲 ngin2、kam24、ho31)。ok = 與真人相同;bad = 入聲字被削掉最後一個字母。"""
+    """每句 5 個字。ok = 與真人相同;bad = 入聲字掉了韻尾;tone = 聲調記號全錯(字母不變)。"""
     ref = {f"s{i}": ["sad5", "ngin2", "gug5", "kam24", "ho31"] for i in range(n)}
-    real = {st: "sad ngin gug kam ho" for st in ref}
+    real = {st: REAL_PFS for st in ref}
     syn = {}
     for st in ref:
-        syn[("ok", 0, st)] = "sad ngin gug kam ho"
-        syn[("bad", 0, st)] = "sa ngin gu kam ho"
+        syn[("ok", 0, st)] = REAL_PFS
+        syn[("bad", 0, st)] = "sà ngîn ku kám hó"
+        syn[("tone", 0, st)] = "sât ngìn kuk kam hô"
     return ref, real, syn
+
+
+def test_a1_tokens_ignore_hallucinations_and_read_tone_marks():
+    sys.path.insert(0, str(ROOT))
+    import a1_asr_check as A
+    assert A.latin_tokens("2004년 300 piong-to 切 ⁇ chhut-loi") == [("piong", ""), ("to", ""), ("chhut", ""), ("loi", "")]
+    assert A.latin_tokens("pûn-ngìn kit-tó sṳ̍t `m") == [("pun", "\u0302"), ("ngin", "\u0300"), ("kit", ""), ("to", "\u0301"),
+                                                    ("sut", "\u030d"), ("m", "")]                 # ṳ 的下加點不算聲調記號
+    assert A.ends_stop("kit") and A.ends_stop("chhok") and A.ends_stop("pap") and not A.ends_stop("ngin") and not A.ends_stop("khi")
 
 
 def test_a1_metrics_flag_degraded_entering_words():
@@ -579,23 +592,28 @@ def test_a1_metrics_flag_degraded_entering_words():
     import a1_asr_check as A
     ref, real, syn = _a1_fake_rows()
     M = A.per_stem_metrics(real, ref, syn)
-    assert np.allclose(list(M["ok"]["cer_letters"].values()), 0) and np.allclose(list(M["ok"]["ref_cer"].values()), 0)
-    assert all(v > 0 for v in M["bad"]["cer_letters"].values())
-    et = {s: sum(M[s]["num_et"].values()) / sum(M[s]["n_et"].values()) for s in M}
-    non = {s: sum(M[s]["num_non"].values()) / sum(M[s]["n_non"].values()) for s in M}
-    assert et["ok"] == 1 and non["ok"] == 1 and non["bad"] == 1
-    assert et["bad"] == pytest.approx(2 / 3)                          # sad→sa、gug→gu:各損失 1/3
-    text = A.build_report(M, ["ok", "bad"], "ok", 0.0, n_boot=200)
-    assert "## 2." in text and "可用句數 60" in text
-    # 入聲字 − 非入聲字 的點估計為負(bad 的入聲字比較吃虧);ok 為 0
-    row_bad = [ln for ln in text.splitlines() if ln.startswith("| bad |") and ln.count("|") == 6][-1]
-    assert row_bad.split("|")[-2].strip().startswith("-")
-    # 詞數對不上標準答案(ASR 把兩個字黏在一起)→ 第 2 項略過,第 1、3 項照常
-    real2 = {st: "sadngin gug kam ho" for st in ref}
-    M2 = A.per_stem_metrics(real2, ref, syn)
-    assert "num_et" not in M2["ok"]
-    text2 = A.build_report(M2, ["ok", "bad"], "ok", None, n_boot=200)
-    assert "這一項略過" in text2 and "## 1." in text2 and "## 3." in text2
+    tot = lambda s, k: sum(M[s][k].values())                                                       # noqa: E731
+    assert tot("ok", "n_et") == 2 * 60 and tot("ok", "n_non") == 3 * 60
+    assert np.allclose(list(M["ok"]["cer_letters"].values()), 0) and all(v > 0 for v in M["bad"]["cer_letters"].values())
+    assert tot("ok", "kept_et") == tot("ok", "n_et") and tot("ok", "tone_et") + tot("ok", "tone_non") == 5 * 60
+    # bad:入聲字 sàt→sà、kuk→ku 相似度 2/3,韻尾沒保留;其他字完全相同
+    assert tot("bad", "sim_et") / tot("bad", "n_et") == pytest.approx(2 / 3) and tot("bad", "kept_et") == 0
+    assert tot("bad", "sim_non") == tot("bad", "n_non") and tot("bad", "false_non") == 0
+    assert tot("bad", "tone_et") == tot("bad", "m_et") and tot("bad", "tone_non") == tot("bad", "m_non")      # 聲調記號沒變
+    # tone:字母不變、聲調記號全錯(入聲字 sàt→sât 錯,kuk 無記號仍對;其他字全錯)
+    assert tot("tone", "sim_et") == tot("tone", "n_et") and tot("tone", "kept_et") == tot("tone", "n_et")
+    assert tot("tone", "tone_non") == 0 and tot("tone", "tone_et") == tot("tone", "m_et") / 2
+    text = A.build_report(M, ["ok", "bad", "tone"], "ok", 0.0, n_boot=200)
+    assert "## 2." in text and "120 個入聲字、180 個其他字" in text
+    ok_rows = [ln for ln in text.splitlines() if ln.startswith("| ok |")]                       # 依序:第 1、2a、2b、3、4 節
+    bad_rows = [ln for ln in text.splitlines() if ln.startswith("| bad |")]
+    assert len(ok_rows) == 5 and ok_rows[2].startswith("| ok | 100.0 [100.0, 100.0] |")           # 2b:ok 的入聲保留率 100%
+    assert bad_rows[2].startswith("| bad | 0.0 [0.0, 0.0] |")                                       # bad 的入聲保留率 0%
+    # 入聲字太少 → 第 2 節略過,其餘照常;完全沒有資料 → 友善訊息
+    small = {st: v for st, v in list(real.items())[:5]}
+    M3 = A.per_stem_metrics(small, ref, {k: v for k, v in syn.items() if k[2] in small})
+    text3 = A.build_report(M3, ["ok", "bad"], "ok", None, n_boot=200)
+    assert "入聲字太少" in text3 and "## 1." in text3 and "## 3." in text3
     assert "沒有任何可用" in A.build_report({}, ["ok"], "ok", None)
 
 
@@ -646,7 +664,7 @@ def test_a1_run_end_to_end_with_fake_asr(tmp_path, monkeypatch):
     def fake_omni(files, model, lang, batch, chunk=64):
         calls.append(len(files))
         assert lang == "hak_Latn" and model == "fake-model"
-        return ["sa ngin gu kam ho" if f.parent.name.startswith("bad") else "sad ngin gug kam ho" for f in files]
+        return ["sà ngîn ku kám hó" if f.parent.name.startswith("bad") else REAL_PFS for f in files]
     monkeypatch.setattr(A, "transcribe_omni", fake_omni)
 
     def run(*names):
@@ -659,7 +677,7 @@ def test_a1_run_end_to_end_with_fake_asr(tmp_path, monkeypatch):
     run("ok", "bad")
     assert calls == [90]                                              # 30 句真人 + 2 個系統 × 30 句
     rep = (tmp_path / "out" / "a1_omni_fake-model_hak_Latn_sixian.md").read_text(encoding="utf-8")
-    assert "可用句數 30" in rep and "| bad |" in rep and "辨識輸出範例" in rep
+    assert "60 個入聲字、90 個其他字" in rep and "| bad |" in rep and "辨識輸出範例" in rep
     run("ok", "bad")
     assert calls == [90]                                              # 全部做過了:不再呼叫 ASR
     run("ok", "bad", "new")
@@ -676,13 +694,9 @@ def test_a1_run_end_to_end_with_fake_asr(tmp_path, monkeypatch):
 
 
 def test_a1_hanzi_output_is_tokenized_per_character():
-    """Whisper 客語微調版可能輸出漢字:一字一個 token,入聲位置照樣對得上。"""
     sys.path.insert(0, str(ROOT))
     import a1_asr_check as A
     assert A.tokens("沙人谷甘好") == list("沙人谷甘好") and A.tokens("沙 ngin 谷") == ["沙", "ngin", "谷"]
-    ref = {"s0": ["sad5", "ngin2", "gug5", "kam24", "ho31"]}
-    M = A.per_stem_metrics({"s0": "沙人谷甘好"}, ref, {("bad", 0, "s0"): "沙人甘好"})      # 漏掉第 3 個字(入聲位置)
-    assert M["bad"]["n_et"]["s0"] == 2 and M["bad"]["num_et"]["s0"] == 1 and M["bad"]["num_non"]["s0"] == 3
 
 
 def test_a1_transcribe_omni_call_shape(monkeypatch):
