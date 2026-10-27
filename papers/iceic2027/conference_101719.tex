@@ -77,7 +77,7 @@ A source model is trained from scratch on the full training pool of the other Ha
 Because the source model contains mel-normalization statistics from the source variety, synthesis uses the statistics calculated from the target-variety training data.
 
 \subsection{Alignment-supervised durations}
-For each variety, an MFA acoustic model was trained on all HAT TTS recordings of that variety and their transcripts, using a pronunciation lexicon derived from the romanization by deterministic rules. The aligner uses only audio and transcripts, never the TTS model, and the same alignments provide the natural reference durations used in Section~III-C. Over 99\% of the utterances were successfully aligned; the remaining 42 Sixian and 143 Hailu utterances were excluded from all subsets. The resulting phone intervals are converted into frame counts using a hop size of 256 samples at a sampling rate of 22.05\,kHz, corresponding to approximately 11.6\,ms per frame.
+For each variety, an MFA acoustic model was trained on all HAT TTS recordings of that variety and their transcripts, including the validation and test recordings, before the data were split, using a pronunciation lexicon derived from the romanization by deterministic rules. MFA training uses only audio and transcripts, without duration labels, and the same alignments provide the natural reference durations used in Section~III-C. Over 99\% of the utterances were successfully aligned; the remaining 42 Sixian and 143 Hailu utterances were excluded from all subsets. The resulting phone intervals are converted into frame counts using a hop size of 256 samples at a sampling rate of 22.05\,kHz, corresponding to approximately 11.6\,ms per frame.
 
 Matcha-TTS inserts blank tokens between input symbols. Aligned pauses are assigned to the corresponding blank tokens, and each blank receives at least one frame, taken from the preceding phone. The resulting durations replace MAS-derived durations during training. They serve as targets for the duration loss and determine the feature expansion used in the prior and decoder losses.
 
@@ -198,7 +198,7 @@ Natural recordings & ---  & ---  & ---   & ---            & 67.1 \\
 Both +AD and XAD improve the measured duration accuracy over Base, and XAD provides further gains over +AD under the evaluated settings. Alignment supervision alone (+AD) raises the share of checked-syllable vowels within $\pm$30\,ms by 6.0 (Sixian) and 8.3 (Hailu) percentage points. XAD adds another 4.3 and 4.5 points, reaching 81.3\% [77.6, 85.2] and 82.2\% [78.0, 86.4] against 71.0\% [66.9, 75.2] and 69.4\% [65.3, 73.8] for Base, which is close to the high-resource references (81.1\% and 83.0\%) for this measure. Other syllables improve as well (63.7\% to 74.0\% and 54.9\% to 65.9\%), and the correlation of checked-syllable durations rises from 0.54 to 0.74 (Sixian) and from 0.58 to 0.74 (Hailu), still below the references (0.77 and 0.80). XAD lowers MCD by 0.33 [0.31, 0.35] and 0.24 [0.20, 0.28]\,dB, two to three times the reduction from +AD (0.12 and 0.10\,dB), and all three seeds move in the same direction. Tone-classification accuracy rises by 8.8 [7.7, 9.9] and 5.3 [4.4, 6.2] percentage points (paired differences pooled over seeds and syllables, so they can differ by 0.1 from the differences of the rounded means in Table~\ref{tab:main}), and XAD exceeds +AD by 4.1 and 3.2 percentage points. The classifier accuracy on XAD-generated speech is close to that on natural recordings (measured on all test sentences). This does not imply that the synthesized tones are more natural or more accurate than human speech.
 
 \subsection{Effect of data size}
-Fig.~\ref{fig:size} compares checked-syllable timing accuracy at 1\,h and 10\,h, with three seeds each, against the single high-resource Base model; the 95\% CIs of the plotted values are about $\pm$4 points.
+Fig.~\ref{fig:size} compares checked-syllable duration accuracy at 1\,h and 10\,h of target-variety training data, with three training seeds per system. The full-data Base references use one training seed. For the 1\,h systems and the full-data references, the 95\% CIs span about $\pm$4 percentage points.
 
 \begin{figure}[H]
 \centering
@@ -206,30 +206,30 @@ Fig.~\ref{fig:size} compares checked-syllable timing accuracy at 1\,h and 10\,h,
 \begin{groupplot}[
   group style={group size=2 by 1, horizontal sep=6mm, y descriptions at=edge left},
   width=0.56\columnwidth, height=0.5\columnwidth,
-  symbolic x coords={1\,h,10\,h,48\,h}, xtick=data, enlarge x limits=0.2,
+  xtick=data, enlarge x limits=0.2,
   ymin=66, ymax=86, ytick={70,75,80,85}, ymajorgrids, grid style={gray!25},
   tick label style={font=\scriptsize}, label style={font=\scriptsize}, title style={font=\scriptsize, yshift=-1.5mm},
   legend style={font=\scriptsize, draw=none, fill=none, legend columns=3, at={(1.06,-0.24)}, anchor=north},
   every axis plot/.append style={thick, mark size=1.6pt}]
-\nextgroupplot[title=Sixian, ylabel={Checked within $\pm$30\,ms (\%)}]
-\addplot[black, mark=o] coordinates {(1\,h,71.0) (10\,h,78.8) (48\,h,81.1)};
+\nextgroupplot[title=Sixian, symbolic x coords={1\,h,10\,h,48.0\,h}, ylabel={Checked within $\pm$30\,ms (\%)}]
+\addplot[black, mark=o] coordinates {(1\,h,71.0) (10\,h,78.8) (48.0\,h,81.1)};
 \addplot[blue, mark=square*] coordinates {(1\,h,77.0) (10\,h,79.4)};
 \addplot[red, mark=triangle*] coordinates {(1\,h,81.3) (10\,h,80.8)};
 \legend{Base, +AD, XAD}
-\nextgroupplot[title=Hailu]
-\addplot[black, mark=o] coordinates {(1\,h,69.4) (10\,h,78.1) (48\,h,83.0)};
+\nextgroupplot[title=Hailu, symbolic x coords={1\,h,10\,h,47.2\,h}]
+\addplot[black, mark=o] coordinates {(1\,h,69.4) (10\,h,78.1) (47.2\,h,83.0)};
 \addplot[blue, mark=square*] coordinates {(1\,h,77.7) (10\,h,81.0)};
 \addplot[red, mark=triangle*] coordinates {(1\,h,82.2) (10\,h,81.6)};
 \end{groupplot}
 \end{tikzpicture}
-\caption{Checked-syllable timing accuracy versus amount of training data.}
+\caption{Checked-syllable duration accuracy across data sizes.}
 \label{fig:size}
 \end{figure}
 
-The gains shrink with more data. At 10\,h, XAD improves the checked-syllable share by 2.0 (Sixian) and 3.5 (Hailu) points and MCD by 0.24 and 0.16\,dB, while +AD alone no longer lowers MCD (+0.04 and +0.03\,dB). The recipe is therefore most useful in the regime it targets, when only about an hour of speech is available; there, XAD with one hour of data comes close to the checked-syllable timing of the full-data baselines.
+The gains over Base are smaller at 10\,h than at 1\,h. At 10\,h, XAD improves checked-syllable duration accuracy by 2.0 percentage points for Sixian and 3.5 percentage points for Hailu. It also reduces MCD by 0.24\,dB and 0.16\,dB, respectively, whereas +AD has MCD differences of +0.04\,dB and +0.03\,dB relative to Base. At 1\,h, XAD achieves duration accuracy close to the full-data Base references on the $\pm$30\,ms measure; XAD additionally uses the source-variety model, so this comparison does not imply that only one hour of Hakka speech is involved.
 
 \subsection{Speech recognition check}
-Table~\ref{tab:asr} lists the speech recognition measures pooled over both varieties (180 sentences), including the copy-synthesis reference; Gap is the letter similarity of checked words minus that of other words.
+Table~\ref{tab:asr} presents ASR-based results pooled across the two varieties using 180 test sentences. The measures include CER between the synthetic-speech and natural-speech ASR transcripts, checked-coda retention, the letter-similarity gap (Gap) between checked and other words, and tone-mark agreement. Copy-synthesis is included as a reference condition.
 
 \begin{table}[H]
 \centering
@@ -252,18 +252,20 @@ Copy-synthesis       & 9.8  & 89.4 & +0.2 & 88.9 \\
 \end{tabular}
 \end{table}
 
-The recognizer never saw the aligner or the tone classifier, so it gives an independent view. Overall CER does not separate the 1-h systems ($-$0.5 [$-$2.7, +1.9] points for XAD), while the high-resource baseline is better ($-$2.6 [$-$4.5, $-$0.5]). The differences appear where XAD targets them. Checked syllables keep their stop coda more often (+4.8 [1.6, 8.0] points), the handicap of checked words relative to other words shrinks from $-$4.1 to $-$0.5 points (+3.6 [1.2, 6.0]), and tone marks agree more often with those of natural speech (+3.2 [1.9, 4.4]). The high-resource baseline improves tone marks equally but leaves the checked-word handicap almost unchanged ($-$3.7), which suggests that the checked-syllable gain comes from duration supervision rather than from more data. With +AD alone the same pattern holds with smaller gains (+3.7, +2.6, and +2.8 points). Copy-synthesis reaches 89.4\% retention, a gap of +0.2, and 88.9\% tone agreement. XAD thus removes the checked-word handicap and closes about 40\% of the retention gap between Base and this reference, while the large CER difference (9.8\% vs.\ 21.7\%) shows that most of what remains is general acoustic quality rather than timing.
+The ASR analysis provides an additional evaluation that does not directly use the MFA timing measurements or the tone classifier. Relative to Base, XAD changes CER by $-$0.5 percentage points with a 95\% CI of [$-$2.7, +1.9], so the observed difference does not establish a clear CER improvement; the full-data Base reference has a lower CER ($-$2.6 [$-$4.5, $-$0.5]). The ASR transcripts retain checked codas more often (+4.8 percentage points [1.6, 8.0]), the checked-word similarity gap narrows from $-$4.1 to $-$0.5 (+3.6 [1.2, 6.0]), and tone-mark agreement increases by 3.2 percentage points [1.9, 4.4]. +AD alone already narrows the gap (+2.6 [0.4, 4.9]), whereas the full-data Base reference does not (+0.4 [$-$2.0, 2.9]) despite a similar tone-mark gain; this suggests that alignment-supervised durations, rather than the amount of target data alone, are associated with the checked-word improvement. XAD substantially reduces the checked-word similarity gap in this ASR-based analysis. A gap remains between XAD and the copy-synthesis reference in ASR transcript agreement (CER 21.7\% vs.\ 9.8\%); the factors contributing to this gap require further investigation.
 
 \subsection{Negative results}
-Inference-time duration scaling, dropout in or pre-training of the duration predictor, replaying source-variety data during target training, and averaging the durations of several seeds gave no further gain over XAD.
+Several additions to XAD were compared directly with XAD: inference-time scaling of vowel durations (three seeds), a higher dropout rate in the duration predictor, pre-training of the duration predictor on source-variety durations, replay of source-variety data during target training (one training seed each), and averaging the predicted durations of the three seeds. None of them provided consistent improvements over XAD under the evaluated settings.
 
 \section{Discussion and Limitations}
-At one hour, alignment supervision accounts for most of the timing gain (6.0 of 10.3 percentage points for Sixian, 8.3 of 12.8 for Hailu), while cross-variety initialization with the larger predictor contributes most of the spectral gain and about half of the tonal gain. The remaining vowel-duration errors concentrate before pauses, where the predictor lengthens vowels more than the speakers do. % TODO: keep only if this qualitative finding should be reported
-The study has limitations. A listening test has not yet been completed, so all results are objective; a paired-comparison listening test is under way. % TODO: update if listening-test results arrive
-All systems share one architecture and vocoder. The recipe needs a pronunciation lexicon and an in-domain aligner; here the aligner was trained on all recordings of each variety, i.e., on more target-variety audio than the one-hour TTS training set. The high-resource reference is a single model. The speech recognizer and the tone classifier are imperfect judges; the classifier reaches only 71.5\% and 67.1\% on natural speech.
+At 1\,h of target-variety training data, +AD improves checked-syllable duration accuracy over Base (6.0 of the 10.3 percentage-point gain for Sixian and 8.3 of 12.8 for Hailu), and XAD provides further gains in the evaluated metrics. Because XAD changes both initialization and predictor capacity, the individual contributions of these two components remain to be isolated.
+
+Several limitations should be considered. A listening test has not yet been completed, so the reported results are based on objective measures. % TODO: update if listening-test results arrive
+The experiments use one TTS architecture and one vocoder. The method also requires a pronunciation lexicon and an in-domain aligner. The aligner was trained on all recordings of each variety, including the validation and test recordings, and therefore uses more target-variety speech than the one-hour TTS training subset; it saw only audio and transcripts, and no TTS model had access to validation or test audio. Because MFA is used for both duration supervision and timing evaluation, alignment errors may affect both stages, although all systems, including Base, are measured with the same aligner. In addition, the full-data Base reference uses one training seed, and in Table~\ref{tab:transfer} the best validation checkpoint of every initialized model occurred at the first or second validation point (1{,}000 or 2{,}000 steps), so a finer validation interval might change these values. The ASR model and tone classifier are imperfect evaluation tools; on natural speech, the classifier reaches 71.5\% accuracy for Sixian and 67.1\% for Hailu.
 
 \section{Conclusion}
-XAD-TTS combines cross-variety initialization with alignment-supervised durations and an enlarged duration predictor. With one hour of Hakka speech, it brings checked-syllable timing close to that of a baseline trained on about 48 hours, reduces spectral distortion, and improves objective tone recognition in both Sixian and Hailu, and a multilingual recognizer shows better agreement with natural speech on checked-syllable codas and tone marks. The recipe adds no inference-time component and trains in about two hours on a single consumer GPU, which makes it a practical starting point for voices in other low-resource varieties.
+XAD-TTS combines cross-variety initialization, alignment-supervised durations, and an enlarged duration predictor. With 1\,h of target-variety training speech, XAD-TTS improves checked-syllable duration accuracy, MCD, and objective tone-classification accuracy for both Sixian and Hailu. On the $\pm$30\,ms duration measure, its results are close to those of the full-data Base references. An additional ASR-based analysis shows improved agreement for checked-syllable codas and tone marks relative to the natural-speech transcripts.
+The aligner is not required during synthesis. A 40{,}000-step target-model training run takes approximately two hours on a single RTX~5070~Ti GPU; this time excludes source-model training, forced alignment, and data preparation. Future work includes listening tests and further experiments to examine the contribution of individual system components.
 
 \section*{Acknowledgment}
 The research was funded by the National Science and Technology Council of the Republic of China under contract number NSTC114-2115-M-033-004. HAT was provided by the Hakka Affairs Council/ACLCLP (No.~2024-005). No new recordings or identifiable data were collected, and no conflicts have been declared.
