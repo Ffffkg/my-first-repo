@@ -14,16 +14,32 @@
 \pgfplotsset{compat=1.18}
 \usepgfplotslibrary{groupplots}
 
+\newcommand{\parhead}[1]{\par\vspace{2pt}\noindent\textbf{#1}\par\nobreak}
+
 \begin{document}
 
 \title{Cross-Variety Initialization and Alignment-Supervised Durations for One-Hour Hakka Speech Synthesis}
 
-\author{\IEEEauthorblockN{Chien-Chih Fang\textsuperscript{1}, I Elizabeth Cha\textsuperscript{1,*}, Shin-Shin Kao\textsuperscript{2}}
-\IEEEauthorblockA{\textsuperscript{1}Master Program in Intelligent Computing and Big Data\\
-\textsuperscript{2}Department of Applied Mathematics\\
-Chung Yuan Christian University, Taoyuan, Taiwan\\
-tom30112@gmail.com, \{icha, shinshin\}@cycu.edu.tw\\
-\textsuperscript{*}Corresponding author}}
+\author{\IEEEauthorblockN{Chien-Chih Fang}
+\IEEEauthorblockA{\textit{Master Program in Intelligent}\\
+\textit{Computing and Big Data}\\
+\textit{Chung Yuan Christian University}\\
+Taoyuan, Taiwan\\
+tom30112@gmail.com}
+\and
+\IEEEauthorblockN{I Elizabeth Cha\textsuperscript{*}}
+\IEEEauthorblockA{\textit{Master Program in Intelligent}\\
+\textit{Computing and Big Data}\\
+\textit{Chung Yuan Christian University}\\
+Taoyuan, Taiwan\\
+icha@cycu.edu.tw\\
+\textsuperscript{*}Corresponding author}
+\and
+\IEEEauthorblockN{Shin-Shin Kao}
+\IEEEauthorblockA{\textit{Department of Applied Mathematics}\\
+\textit{Chung Yuan Christian University}\\
+Taoyuan, Taiwan\\
+shinshin@cycu.edu.tw}}
 
 \maketitle
 
@@ -103,13 +119,17 @@ Synthesis uses 10 ODE steps, temperature 0.667, and the universal HiFi-GAN vocod
 \subsection{Evaluation}
 For each variety, 100 test sentences (50 per speaker) are synthesized. 95\% confidence intervals (CIs) are obtained by resampling sentences 5{,}000 times; with several seeds, every seed uses the same resampled sentences.
 
-\textbf{Spectral distortion.} Mel-cepstral distortion (MCD)~\cite{kubichek1993mcd} is computed on 24 WORLD~\cite{morise2016world} mel-cepstral coefficients (without $c_0$) after dynamic time warping and averaged over five generation seeds per sentence.
+\parhead{Spectral distortion}
+Mel-cepstral distortion (MCD)~\cite{kubichek1993mcd} is computed on 24 WORLD~\cite{morise2016world} mel-cepstral coefficients (without $c_0$) after dynamic time warping and averaged over five generation seeds per sentence.
 
-\textbf{Segment timing.} Each synthesized waveform is force-aligned with the same MFA model, and the duration of every vowel nucleus is compared with the same nucleus in the natural recording. Timing accuracy is the share of nuclei within $\pm$30\,ms (2.6 frames) of the natural duration, reported separately for checked and other syllables, together with the Pearson correlation $\rho$ of checked-syllable nucleus durations. Tolerances of $\pm$20 and $\pm$50\,ms give the same ranking of Base, +AD, and XAD.
+\parhead{Segment timing}
+Each synthesized waveform is force-aligned with the same MFA model, and the duration of every vowel nucleus is compared with the same nucleus in the natural recording. Timing accuracy is the share of nuclei within $\pm$30\,ms (2.6 frames) of the natural duration, reported separately for checked and other syllables, together with the Pearson correlation $\rho$ of checked-syllable nucleus durations. Tolerances of $\pm$20 and $\pm$50\,ms give the same ranking of Base, +AD, and XAD.
 
-\textbf{Tone recognition.} A gradient-boosting classifier is trained on natural training speech with acoustic features only: a five-point F0 contour of the nucleus in semitones, its mean and slope, log-duration, voicing ratio, and the F0 of neighboring syllables. Its accuracy on the synthesized syllables is reported, and its accuracy on natural test recordings serves as a reference.
+\parhead{Tone recognition}
+A gradient-boosting classifier is trained on natural training speech with acoustic features only: a five-point F0 contour of the nucleus in semitones, its mean and slope, log-duration, voicing ratio, and the F0 of neighboring syllables. Its accuracy on the synthesized syllables is reported, and its accuracy on natural test recordings serves as a reference.
 
-\textbf{Speech recognition check.} Omnilingual ASR~\cite{omnilingual2025} (1B LLM decoder, version~2, language code \texttt{hak\_Latn}) transcribes Hakka in a romanization with tone diacritics and stop codas \textit{-p}, \textit{-t}, \textit{-k}. Each natural recording and its synthetic versions are transcribed, and the transcripts are aligned word by word. The measures are the character error rate (CER) of the synthetic transcript against the natural one, the retention of checked syllables (natural-transcript words ending in \textit{-p}/\textit{-t}/\textit{-k} whose aligned synthetic word still does), the letter-similarity gap between checked and other words, and the tone-mark agreement of aligned words. Twenty of the 200 test sentences are excluded because the recognizer's output for the natural recording was mostly non-Latin text, and the results are pooled over the two varieties. Copy-synthesis, in which natural mel spectrograms are passed through the same vocoder, serves as an upper bound.
+\parhead{Speech recognition check}
+Omnilingual ASR~\cite{omnilingual2025} (1B LLM decoder, version~2, language code \texttt{hak\_Latn}) transcribes Hakka in a romanization with tone diacritics and stop codas \textit{-p}, \textit{-t}, \textit{-k}. Each natural recording and its synthetic versions are transcribed, and the transcripts are aligned word by word. The measures are the character error rate (CER) of the synthetic transcript against the natural one, the retention of checked syllables (natural-transcript words ending in \textit{-p}/\textit{-t}/\textit{-k} whose aligned synthetic word still does), the letter-similarity gap between checked and other words, and the tone-mark agreement of aligned words. Twenty of the 200 test sentences are excluded because the recognizer's output for the natural recording was mostly non-Latin text, and the results are pooled over the two varieties. Copy-synthesis, in which natural mel spectrograms are passed through the same vocoder, serves as an upper bound.
 
 \section{Results}
 
