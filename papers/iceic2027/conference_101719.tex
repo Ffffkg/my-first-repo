@@ -128,7 +128,7 @@ Three systems are compared, all with joint symbols: Base, the original Matcha-TT
 Synthesis uses 10 sampling steps of the flow-matching decoder, temperature 0.667, and the universal HiFi-GAN vocoder.
 
 \subsection{Evaluation}
-For each variety, 100 test sentences (50 per speaker) are randomly sampled from the test set and synthesized by every system. The text of 3 Sixian and 10 Hailu sentences also occurs in the training data of the other variety, which the source model may have seen; excluding them changes the checked-syllable gain of XAD over Base by at most 0.2 percentage points and its MCD reduction by at most 0.005\,dB, so all sentences are kept. 95\% confidence intervals (CIs) are obtained by resampling sentences 5{,}000 times; with several seeds, every seed uses the same resampled sentences.
+For each variety, 100 test sentences (50 per speaker) are randomly sampled from the test set and synthesized by every system. The text of 3 Sixian and 10 Hailu sentences also occurs in the training data of the other variety, which the source model may have seen; excluding them changes the checked-syllable gain of XAD over Base by at most 0.2 percentage points and its MCD reduction by at most 0.005\,dB, so all sentences are kept. 95\% confidence intervals (CIs) are obtained by resampling sentences 5{,}000 times; with several seeds, every seed uses the same resampled sentences. Values in square brackets denote these 95\% CIs.
 
 \parhead{Spectral distortion}
 Mel-cepstral distortion (MCD)~\cite{kubichek1993mcd} is computed on 24 WORLD~\cite{morise2016world} mel-cepstral coefficients (without $c_0$) after dynamic time warping and averaged over five generation seeds per sentence.
