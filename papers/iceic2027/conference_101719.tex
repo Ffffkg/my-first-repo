@@ -44,7 +44,7 @@ shinshin@cycu.edu.tw}}
 \maketitle
 
 \begin{abstract}
-Hakka is a tonal language with several regional varieties, many of which have little recorded speech. This paper studies neural text-to-speech (TTS) for two Taiwanese Hakka varieties, Sixian and Hailu, when only one hour of target-variety speech is available. In such models, a duration predictor decides how long each sound lasts, and this timing shapes the rhythm of speech, the realization of tones, and checked syllables, which end in an unreleased stop and typically have a short vowel. With one hour of data, however, the model must learn its alignments, and therefore its duration targets, from very little speech. This paper proposes XAD-TTS, a training recipe for Matcha-TTS that brings in two kinds of outside knowledge: the model is initialized from a model of a closely related Hakka variety, and an enlarged duration predictor is trained on durations from a forced aligner instead of the model's own alignments. Across three training seeds, XAD-TTS raises the share of checked-syllable vowels whose durations, measured on synthesized waveforms, are within 30\,ms of natural speech from 71.0\% to 81.3\% for Sixian and from 69.4\% to 82.2\% for Hailu, close to full-data baselines trained on 48.0 and 47.2 hours of speech on this measure. It also reduces mel-cepstral distortion by 0.33 and 0.24\,dB and improves objective tone classification, and an automatic speech recognition analysis shows better agreement with natural speech for checked-syllable codas and tone marks.
+Hakka is a tonal language with several regional varieties, many of which have little recorded speech. This paper studies neural text-to-speech (TTS) for two Taiwanese Hakka varieties, Sixian and Hailu, when only one hour of target-variety speech is available. In such models, a duration predictor decides how long each sound lasts, and this timing shapes the rhythm of speech, the realization of tones, and checked syllables, which end in an unreleased stop and typically have a short vowel. With one hour of data, however, the model must learn its alignments, and therefore its duration targets, from very little speech. This paper proposes XAD-TTS, a training recipe for Matcha-TTS that combines cross-variety initialization with forced-alignment duration supervision: the model is initialized from a model of a closely related Hakka variety, and an enlarged duration predictor is trained on forced-alignment durations instead of the model's own alignments. Across three training seeds, XAD-TTS raises the share of checked-syllable vowels whose durations, measured on synthesized waveforms, are within 30\,ms of the corresponding natural-speech durations from 71.0\% to 81.3\% for Sixian and from 69.4\% to 82.2\% for Hailu, close to full-data baselines trained on 48.0 and 47.2 hours of speech on this measure. It also reduces mel-cepstral distortion by 0.33 and 0.24\,dB and improves objective tone classification, and an automatic speech recognition analysis shows better agreement with natural speech for checked-syllable codas and tone marks.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -55,11 +55,11 @@ duration modeling, forced alignment, Hakka, low-resource languages, text-to-spee
 
 Hakka is a Sinitic tonal language spoken in several regional varieties. In Taiwan, Sixian and Hailu are two major Hakka varieties. They share many consonants and vowels but differ in their tone systems. Although Hakka speech technology has begun to emerge~\cite{chen2024voxhakka}, recorded speech resources remain limited for individual varieties, making it difficult to develop TTS systems when only a small amount of target-variety data is available.
 
-Many recent neural TTS models are non-autoregressive: a duration predictor first decides how many acoustic frames each input symbol receives, and a decoder then generates speech with that fixed timing~\cite{ren2021fastspeech2,mehta2024matcha}. The predicted durations therefore set the rhythm and segment lengths of the output, and the decoder cannot correct them. Timing matters especially in a tonal language, because a tone is realized as a pitch contour over the vowel, so the vowel length sets how much time the contour has. In Hakka it also matters for checked syllables, which end in an unreleased stop, written as \textit{-b}, \textit{-d}, or \textit{-g} in the romanization used in this study. These syllables typically have short vowel nuclei, so vowel duration is one of the cues that distinguish them from other syllables.
+Many recent neural TTS models are non-autoregressive: a duration predictor first decides how many acoustic frames each input symbol receives, and a decoder then generates speech with that fixed timing~\cite{ren2021fastspeech2,mehta2024matcha}. The predicted durations determine the length of the expanded input representation and strongly influence the timing of the synthesized speech. In tonal languages, vowel duration can affect the time available for realizing a pitch contour, which is an important acoustic cue for lexical tone. In Hakka, timing also matters for checked syllables, which end in an unreleased stop, written as \textit{-b}, \textit{-d}, or \textit{-g} in the romanization used in this study. These syllables typically have short vowel nuclei, so vowel duration is one of the cues that distinguish them from other syllables.
 
-Models such as Matcha-TTS~\cite{mehta2024matcha} obtain their duration targets themselves: during training, monotonic alignment search (MAS)~\cite{kim2020glow} aligns input symbols with acoustic frames, and the duration predictor learns to reproduce these alignments. The alignments are thus estimated by the model being trained, from the same data. With one hour of speech, both the acoustic model and its alignments are learned from little data, and errors in the alignments are passed on to the duration predictor.
+Models such as Matcha-TTS~\cite{mehta2024matcha} obtain their duration targets themselves: during training, monotonic alignment search (MAS)~\cite{kim2020glow} aligns input symbols with acoustic frames, and the duration predictor learns to reproduce these alignments. Learning alignments inside the TTS model removes the need for an external aligner~\cite{kim2020glow,badlani2022one}. The alignments are thus estimated by the model being trained, from the same data. With one hour of speech, both the acoustic model and its alignments are learned from little data, and errors in the alignments are passed on to the duration predictor.
 
-For a low-resource Hakka variety, two kinds of outside knowledge can help. First, a closely related variety may have much more recorded speech. Sixian and Hailu share many consonants and vowels, so a model trained on one can give the other a better starting point than random initialization, much as models of related, better-resourced languages have been used for low-resource TTS~\cite{chen2019crosslingual,xu2020lrspeech}. Second, a forced aligner such as the Montreal Forced Aligner (MFA)~\cite{mcauliffe2017mfa}, trained on recordings of the variety, provides phone durations that do not depend on the TTS model, as used in FastSpeech~2~\cite{ren2021fastspeech2}. This paper proposes XAD-TTS, short for cross-variety initialization with alignment-supervised durations, which combines the two for Hakka. The target model starts from a model of the other variety, which addresses the small amount of acoustic data, and its duration predictor, enlarged to use a wider context, is trained on aligner durations instead of MAS alignments, which addresses the unreliable duration targets. The aligner is needed only during training. Each ingredient has been used separately before; XAD-TTS combines them for a pair of closely related varieties and measures their effect on segment timing. The main contributions are as follows:
+For a low-resource Hakka variety, two additional resources can help. First, a closely related variety may have much more recorded speech. Sixian and Hailu share many consonants and vowels, so a model trained on one variety may provide useful initialization for the other, much as pre-training on other data~\cite{chung2019semi} and models of related, better-resourced languages~\cite{chen2019crosslingual,xu2020lrspeech} have been used to reduce the data needed for TTS. Second, a forced aligner such as the Montreal Forced Aligner (MFA)~\cite{mcauliffe2017mfa}, trained on recordings of the variety, provides phone durations that do not depend on the TTS model, as used in FastSpeech~2~\cite{ren2021fastspeech2}. This paper proposes XAD-TTS, short for cross-variety initialization with alignment-supervised durations, which combines the two for Hakka. The target model starts from a model of the other variety, and its duration predictor, enlarged to use a wider context, is trained on aligner durations instead of MAS alignments. The combination is intended to improve duration modeling under limited target-variety training data. The aligner is not required during synthesis; it is also used in this study to measure segment durations during evaluation. Each ingredient has been used separately before; XAD-TTS combines them for a pair of closely related varieties and measures their effect on segment timing. The main contributions are as follows:
 \begin{itemize}
 \item \textbf{XAD-TTS:} A training recipe for Matcha-TTS that combines cross-variety initialization, alignment-supervised durations, and an enlarged duration predictor, without adding any component at synthesis time.
 \item \textbf{Experiments across data sizes:} Evaluation on Sixian and Hailu using three training seeds at 1\,h and 10\,h, together with single-seed full-data baseline references at 48.0\,h and 47.2\,h.
@@ -262,7 +262,7 @@ Several additions to XAD were compared directly with XAD: inference-time scaling
 \section{Discussion and Limitations}
 At 1\,h of target-variety training data, +AD improves checked-syllable duration accuracy over Base (6.0 of the 10.3 percentage-point gain for Sixian and 8.3 of 12.8 for Hailu), and XAD provides further gains in the evaluated metrics. Because XAD changes both initialization and predictor capacity, the individual contributions of these two components remain to be isolated.
 
-Several limitations should be considered. The aligner was trained on all recordings of each variety, including the validation and test recordings, and therefore uses more target-variety speech than the one-hour TTS training subset; it saw only audio and transcripts, and no TTS model had access to validation or test audio. Because MFA is used for both duration supervision and timing evaluation, alignment errors may affect both stages, although all systems, including Base, are measured with the same aligner. In addition, the full-data Base reference uses one training seed, and in Table~\ref{tab:transfer} the best validation checkpoint of every initialized model occurred at the first or second validation point (1{,}000 or 2{,}000 steps), so a finer validation interval might change these values. The ASR model and tone classifier are imperfect evaluation tools; on natural speech, the classifier reaches 71.5\% accuracy for Sixian and 67.1\% for Hailu.
+Several limitations should be considered. The aligner was trained on all recordings of each variety, including the validation and test recordings, and therefore uses more target-variety speech than the one-hour TTS training subset. Because MFA is used for both duration supervision and timing evaluation, alignment errors may affect both stages, although all systems, including Base, are measured with the same aligner. In addition, the full-data Base reference uses one training seed, and in Table~\ref{tab:transfer} the best validation checkpoint of every initialized model occurred at the first or second validation point (1{,}000 or 2{,}000 steps), so a finer validation interval might change these values. The ASR model and tone classifier are imperfect evaluation tools; on natural speech, the classifier reaches 71.5\% accuracy for Sixian and 67.1\% for Hailu.
 
 \section{Conclusion}
 XAD-TTS combines cross-variety initialization, alignment-supervised durations, and an enlarged duration predictor. With 1\,h of target-variety training speech, XAD-TTS improves checked-syllable duration accuracy, MCD, and objective tone-classification accuracy for both Sixian and Hailu. On the $\pm$30\,ms duration measure, its results are close to those of the full-data Base references. An additional ASR-based analysis shows improved agreement for checked-syllable codas and tone marks relative to the natural-speech transcripts.
@@ -299,6 +299,11 @@ L.-W. Chen, H.-S. Lee, and C.-C. Chang, ``{VoxHakka}: A dialectally diverse
   multi-speaker text-to-speech system for {Taiwanese Hakka},''
   arXiv:2409.01548, 2024.
 
+\bibitem{ren2021fastspeech2}
+Y.~Ren, C.~Hu, X.~Tan, T.~Qin, S.~Zhao, Z.~Zhao, and T.-Y. Liu, ``{FastSpeech
+  2}: Fast and high-quality end-to-end text to speech,'' in \emph{Proc. Int.
+  Conf. Learning Representations (ICLR)}, 2021.
+
 \bibitem{mehta2024matcha}
 S.~Mehta, R.~Tu, J.~Beskow, {\'E}.~Sz{\'e}kely, and G.~E. Henter,
   ``{Matcha-TTS}: A fast {TTS} architecture with conditional flow matching,''
@@ -310,6 +315,17 @@ J.~Kim, S.~Kim, J.~Kong, and S.~Yoon, ``{Glow-TTS}: A generative flow for
   text-to-speech via monotonic alignment search,'' in \emph{Advances in Neural
   Information Processing Systems (NeurIPS)}, 2020.
 
+\bibitem{badlani2022one}
+R.~Badlani, A.~{\L}a{\'n}cucki, K.~J. Shih, R.~Valle, W.~Ping, and
+  B.~Catanzaro, ``One {TTS} alignment to rule them all,'' in \emph{Proc. IEEE
+  Int. Conf. Acoust., Speech, Signal Process. (ICASSP)}, 2022.
+
+\bibitem{chung2019semi}
+Y.-A. Chung, Y.~Wang, W.-N. Hsu, Y.~Zhang, and R.~J. Skerry-Ryan,
+  ``Semi-supervised training for improving data efficiency in end-to-end speech
+  synthesis,'' in \emph{Proc. IEEE Int. Conf. Acoust., Speech, Signal Process.
+  (ICASSP)}, 2019.
+
 \bibitem{chen2019crosslingual}
 Y.-J. Chen, T.~Tu, C.~chieh Yeh, and H.~yi~Lee, ``End-to-end text-to-speech for
   low-resource languages by cross-lingual transfer learning,'' in \emph{Proc.
@@ -319,11 +335,6 @@ Y.-J. Chen, T.~Tu, C.~chieh Yeh, and H.~yi~Lee, ``End-to-end text-to-speech for
 J.~Xu, X.~Tan, Y.~Ren, T.~Qin, J.~Li, S.~Zhao, and T.-Y. Liu, ``{LRSpeech}:
   Extremely low-resource speech synthesis and recognition,'' in \emph{Proc. ACM
   SIGKDD Int. Conf. Knowledge Discovery \& Data Mining (KDD)}, 2020.
-
-\bibitem{ren2021fastspeech2}
-Y.~Ren, C.~Hu, X.~Tan, T.~Qin, S.~Zhao, Z.~Zhao, and T.-Y. Liu, ``{FastSpeech
-  2}: Fast and high-quality end-to-end text to speech,'' in \emph{Proc. Int.
-  Conf. Learning Representations (ICLR)}, 2021.
 
 \bibitem{mcauliffe2017mfa}
 M.~McAuliffe, M.~Socolof, S.~Mihuc, M.~Wagner, and M.~Sonderegger, ``{Montreal
