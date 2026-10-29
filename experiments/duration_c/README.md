@@ -296,6 +296,7 @@ python e_analyze.py --key ~/hakka_tts/exp_e/hailu_base_vs_c2/key.csv  --response
 | `a1_setup_env.sh` | A1 前置:建立獨立的 conda 環境 `asr`(torch 2.8.0 cu128 + fairseq2 0.6.0 + conda 版 libsndfile 1.0.31 + 從 GitHub 釘版本裝 omnilingual-asr,v2 模型卡只在 GitHub 版;pyarrow < 26、transformers < 5,避開與 fairseq2 0.6 的 numpy / huggingface_hub 版本衝突),最後做環境檢查 | 否 |
 | `x1_overlap.py` | X1:跨腔文本重疊敏感度(主實驗測試句中與另一腔訓練池同文字的句子;全部 vs 排除後的命中率與 MCD 差) | 否 |
 | `x1_run.sh` | X1 一鍵:base / C2 / C6 三種子與 48h,兩個腔調 | 否 |
+| `x2_ablation.sh` | X2:XAD 成分消融(base / X / AD / X+AD / AD+DP / XAD,三種子):補訓練 c3b、xmas,驗證集選取整,出命中率、ρ、MCD、聲調報告;`REPORT_ONLY=1` 只出報告 | 是 |
 | `a1_run.sh` | A1 一鍵:找出 base / C2 / C6(三種子)與 48h 的評估資料夾,在 `asr` 環境辨識並出報告(`DIALECTS=sixian NSENT=10` 先小試) | 是 |
 | `c3_target_check.py` | C3 前置診斷:C2 母音核偏差拆成 訓練目標 / blank 靜音 / 預測器 / 取整 | 是(只跑編碼器) |
 | `c3_fit_pp.py` | C3a:在驗證集估停頓前母音核縮放 s_pp(c_eval / d1_pipeline 用 `--s-pp`) | 否 |

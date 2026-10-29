@@ -22,6 +22,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from hakka_c import config as C  # noqa: E402
 from hakka_c.csvio import boolcol, read_cols  # noqa: E402
+from hakka_c.stats import pearson  # noqa: E402
 
 CJK = re.compile(r"[㐀-䶿一-鿿豈-﫿\U00020000-\U0003134f]")
 TOL_MS = 30
@@ -61,6 +62,16 @@ def hit_counts(dirs, stems, entering):
     return hits, n
 
 
+def checked_rho(dirs, stems):
+    """入聲母音核「合成時長 vs 真人時長」的 Pearson ρ,各訓練種子分別算再平均(同 c_seeds.py)。"""
+    vals = []
+    for d in dirs:
+        c = read_cols(Path(d) / "syllables_wave.csv")
+        m = boolcol(c["entering"]) & np.isin(np.asarray(c["stem"]).astype(str), stems)
+        vals.append(pearson(c["pred_ms"][m].astype(float), c["ref_ms"][m].astype(float)))
+    return float(np.mean(vals))
+
+
 def mcd_per_stem(dirs, stems):
     """每句 MCD(生成種子平均,再對訓練種子平均);沒有 mcd.csv 時回傳 None。"""
     rows = []
@@ -96,7 +107,7 @@ def report(systems, base, stems, n_boot, seed=42):
     mcd = {k: mcd_per_stem(v, stems) for k, v in systems.items()}
     L = []
     for k in systems:
-        cells = [f"{100 * rate(hit[k][True]):.1f}", f"{100 * rate(hit[k][False]):.1f}"]
+        cells = [f"{100 * rate(hit[k][True]):.1f}", f"{100 * rate(hit[k][False]):.1f}", f"{checked_rho(systems[k], stems):.3f}"]
         if k == base:
             cells += ["—", "—"]
         else:
@@ -152,7 +163,8 @@ def main():
          + (f",另有 {len(missing)} 句在 test.tsv 找不到文字" if missing else "") + "。\n",
          f"重疊句:{', '.join(overlap) if overlap else '(無)'}\n",
          f"命中率 = 母音核時長誤差在 ±{TOL_MS} ms 內的比例(%);差 = 系統 − {args.base},CI 以句子重抽 {args.n_boot} 次。\n"]
-    head = ["| 系統 | 入聲 ±30 ms | 舒聲 ±30 ms | 入聲命中率與 base 的差 | MCD 與 base 的差 (dB) |", "|---|---|---|---|---|"]
+    head = [f"| 系統 | 入聲 ±30 ms | 舒聲 ±30 ms | 入聲 ρ | 入聲命中率與 {args.base} 的差 | MCD 與 {args.base} 的差 (dB) |",
+            "|---|---|---|---|---|---|"]
     L += [f"## 全部 {len(stems)} 句\n"] + head + report(systems, args.base, stems, args.n_boot)
     if overlap:
         L += ["", f"## 排除重疊句後 {len(clean)} 句\n"] + head + report(systems, args.base, clean, args.n_boot)
