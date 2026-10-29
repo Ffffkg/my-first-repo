@@ -791,3 +791,26 @@ def test_a1_transcribe_omni_call_shape(monkeypatch):
     seen["calls"].clear()
     A.transcribe_omni(files, "m", "none", 4)
     assert seen["calls"][0][1] is None
+
+
+def test_x3_remeasure(tmp_path):
+    """新 MFA 的真人 / 合成 TextGrid → 逐音節 ref_ms / pred_ms(合成取生成種子平均),音節集合沿用 bounds。"""
+    names = ["s", "ii@5", "d", "d", "o@24", "ng"]
+    ev = tmp_path / "ev"
+    (ev / "bounds").mkdir(parents=True)
+    json.dump({"names": names, "syllables": [{"idx": 0, "entering": True, "ref_ms": 70.0},
+                                             {"idx": 1, "entering": False, "ref_ms": 150.0}]},
+              open(ev / "bounds" / "XF-1.json", "w"))
+    nat = tmp_path / "nat" / "XF"
+    nat.mkdir(parents=True)
+    (nat / "XF-1.TextGrid").write_text(LONG_TG, encoding="utf-8")            # ii = 80 ms
+    syn = ev / "mfa_tg_x3" / "XF"
+    syn.mkdir(parents=True)
+    (syn / "XF-1_g1234.TextGrid").write_text(LONG_TG, encoding="utf-8")
+    (syn / "XF-1_g2345.TextGrid").write_text(LONG_TG.replace("0.28", "0.30"), encoding="utf-8")   # ii = 100 ms
+    out = subprocess.run([sys.executable, str(ROOT / "x3_remeasure.py"), "--dialect", "sixian", "--eval-dir", str(ev),
+                          "--nat-tg", str(tmp_path / "nat")], capture_output=True, text=True)
+    assert out.returncode == 0, out.stderr
+    c = read_cols(ev / "syllables_wave_x3.csv")
+    assert list(c["syl_idx"]) == [0, 1] and list(c["entering"]) == [1, 0]
+    assert abs(c["ref_ms"][0] - 80) < 1e-6 and abs(c["pred_ms"][0] - 90) < 1e-6 and c["n_gen"][0] == 2

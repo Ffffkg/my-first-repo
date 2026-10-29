@@ -47,12 +47,15 @@ def tsv_texts(path):
     return out
 
 
+SYL_CSV = "syllables_wave.csv"      # --csv 可改成 x3_remeasure.py 的 syllables_wave_x3.csv
+
+
 def hit_counts(dirs, stems, entering):
     """每句的「誤差在 ±30 ms 內的母音核數」與「母音核數」(各訓練種子加總)。"""
     pos = {s: i for i, s in enumerate(stems)}
     hits, n = np.zeros(len(stems)), np.zeros(len(stems))
     for d in dirs:
-        c = read_cols(Path(d) / "syllables_wave.csv")
+        c = read_cols(Path(d) / SYL_CSV)
         st = np.asarray(c["stem"]).astype(str)
         m = (boolcol(c["entering"]) == entering) & np.isin(st, stems)
         idx = np.array([pos[s] for s in st[m]], dtype=int)
@@ -66,7 +69,7 @@ def checked_rho(dirs, stems):
     """入聲母音核「合成時長 vs 真人時長」的 Pearson ρ,各訓練種子分別算再平均(同 c_seeds.py)。"""
     vals = []
     for d in dirs:
-        c = read_cols(Path(d) / "syllables_wave.csv")
+        c = read_cols(Path(d) / SYL_CSV)
         m = boolcol(c["entering"]) & np.isin(np.asarray(c["stem"]).astype(str), stems)
         vals.append(pearson(c["pred_ms"][m].astype(float), c["ref_ms"][m].astype(float)))
     return float(np.mean(vals))
@@ -126,6 +129,7 @@ def report(systems, base, stems, n_boot, seed=42):
 
 
 def main():
+    global SYL_CSV
     ap = argparse.ArgumentParser()
     ap.add_argument("--dialect", required=True, choices=C.DIALECTS)
     ap.add_argument("--sys", action="append", required=True, metavar="NAME=DIR1,DIR2,...")
@@ -133,8 +137,10 @@ def main():
     ap.add_argument("--test-tsv", help=f"預設 {C.BENCH}/<腔調>/test.tsv")
     ap.add_argument("--src-tsv", help=f"預設 {C.BENCH}/<另一腔>/train_full.tsv")
     ap.add_argument("--n-boot", type=int, default=5000)
+    ap.add_argument("--csv", default=SYL_CSV, help="逐音節檔名(X3 用 syllables_wave_x3.csv)")
     ap.add_argument("--out")
     args = ap.parse_args()
+    SYL_CSV = args.csv
 
     other = [d for d in C.DIALECTS if d != args.dialect][0]
     test = tsv_texts(Path(args.test_tsv or C.BENCH / args.dialect / "test.tsv").expanduser())
@@ -148,7 +154,7 @@ def main():
     if args.base not in systems:
         sys.exit(f"★ 沒有基準系統 {args.base}")
 
-    stems = sorted(set(np.asarray(read_cols(systems[args.base][0] / "syllables_wave.csv")["stem"]).astype(str)))
+    stems = sorted(set(np.asarray(read_cols(systems[args.base][0] / SYL_CSV)["stem"]).astype(str)))
     missing = [s for s in stems if s not in test]
     if len(missing) == len(stems):
         sys.exit(f"★ 評估句的檔名對不到 test.tsv(例如 {stems[:3]} vs {list(test)[:3]})")

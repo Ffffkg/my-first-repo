@@ -297,6 +297,8 @@ python e_analyze.py --key ~/hakka_tts/exp_e/hailu_base_vs_c2/key.csv  --response
 | `x1_overlap.py` | X1:跨腔文本重疊敏感度(主實驗測試句中與另一腔訓練池同文字的句子;全部 vs 排除後的命中率與 MCD 差) | 否 |
 | `x1_run.sh` | X1 一鍵:base / C2 / C6 三種子與 48h,兩個腔調 | 否 |
 | `x2_ablation.sh` | X2:XAD 成分消融(base / X / AD / X+AD / AD+DP / XAD,三種子):補訓練 c3b、xmas,驗證集選取整,出命中率、ρ、MCD、聲調報告;`REPORT_ONLY=1` 只出報告 | 是 |
+| `x3_mfa_trainonly.sh` | X3:只用訓練集重訓 MFA,重新對齊真人測試錄音與 base / C2 / C6 / 48h 的合成語音,和原本量測並列(確認結果不是因為 MFA 看過測試錄音) | 否(CPU) |
+| `x3_remeasure.py` | X3:用新 MFA 的 TextGrid 重算逐音節參考 / 預測時長,輸出 syllables_wave_x3.csv | 否 |
 | `a1_run.sh` | A1 一鍵:找出 base / C2 / C6(三種子)與 48h 的評估資料夾,在 `asr` 環境辨識並出報告(`DIALECTS=sixian NSENT=10` 先小試) | 是 |
 | `c3_target_check.py` | C3 前置診斷:C2 母音核偏差拆成 訓練目標 / blank 靜音 / 預測器 / 取整 | 是(只跑編碼器) |
 | `c3_fit_pp.py` | C3a:在驗證集估停頓前母音核縮放 s_pp(c_eval / d1_pipeline 用 `--s-pp`) | 否 |
