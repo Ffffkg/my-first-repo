@@ -139,7 +139,8 @@ for d in sixian hailu; do
           "${sys_args[@]}" "${cmp_args[@]}" --out-dir "$gout" > /dev/null 2>&1 || { echo "★ G1 失敗:$k"; continue; }
       acc=$(python - "$gout/g1_summary.md" "$k" <<'PY'
 import re, sys
-rows = [l for l in open(sys.argv[1], encoding="utf-8") if l.startswith(f"| {sys.argv[2]}_s")]
+text = open(sys.argv[1], encoding="utf-8").read().split("## 各聲調")[0]   # 只看第一張表(全部音節)
+rows = [l for l in text.splitlines() if l.startswith(f"| {sys.argv[2]}_s")]
 vals = [float(re.split(r"\s*\|\s*", l)[3].split()[0]) for l in rows]
 print(f"{sum(vals) / len(vals):.1f}" if vals else "?")
 PY
