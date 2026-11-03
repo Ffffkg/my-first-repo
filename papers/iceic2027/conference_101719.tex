@@ -145,7 +145,7 @@ The 1B Omnilingual ASR model~\cite{omnilingual2025}, set to Hakka, transcribes H
 \section{Results}
 
 \subsection{Cross-variety initialization}
-In a preliminary sweep over five data sizes from 1 to 48\,h, initialization lowered the validation loss in 16 of 20 settings; the gain was largest at 1\,h (0.08--0.13) and was close to zero under the full-data conditions (48.0 and 47.2\,h), so the analysis focuses on 1\,h. Table~\ref{tab:transfer} compares MCD between training from scratch and cross-variety initialization with 1\,h of target-variety data and one training seed. Each model is trained for 40{,}000 steps with validation every 1{,}000 steps, and the checkpoint with the lowest validation loss is evaluated; this differs from the main experiments, where the 40{,}000-step checkpoint is evaluated. $\Delta$ is the MCD of the initialized model minus that of the model trained from scratch, computed per sentence from unrounded values, so it can differ by 0.01 from the difference of the rounded means. The 95\% CI in brackets is obtained by resampling sentences 10{,}000 times within each speaker. Table~\ref{tab:transfer} uses its own 100 test sentences without these overlapping texts, so its MCD values are not comparable with those of the main experiments.
+In a preliminary sweep over five data sizes from 1 to 48\,h, initialization lowered the validation loss in 16 of 20 settings; the gain was largest at 1\,h (0.08--0.13) and was close to zero under the full-data conditions (48.0 and 47.2\,h), so the analysis focuses on 1\,h. Table~\ref{tab:transfer} compares MCD between training from scratch and cross-variety initialization with 1\,h of target-variety data and one training seed. Each model is trained for 40{,}000 steps with validation every 1{,}000 steps, and the checkpoint with the lowest validation loss is evaluated; this differs from the main experiments, where the 40{,}000-step checkpoint is evaluated. Scratch and Init.\ give the MCD (dB) of the model trained from scratch and of the initialized model, and $\Delta$ is the MCD of the initialized model minus that of the model trained from scratch, computed per sentence from unrounded values, so it can differ by 0.01 from the difference of the rounded means. The 95\% CI in brackets is obtained by resampling sentences 10{,}000 times within each speaker. Table~\ref{tab:transfer} uses its own 100 test sentences without these overlapping texts, so its MCD values are not comparable with those of the main experiments.
 
 \begin{table}[H]
 \centering
@@ -167,7 +167,7 @@ Hailu  & separate & 6.48 & 6.22 & $-$0.26 [$-$0.30, $-$0.22] \\
 Initialization lowers MCD in three of four settings, by up to 0.36\,dB, but raises it for Hailu with joint symbols (+0.13\,dB), mostly for the male speaker (+0.35\,dB vs.\ $-$0.08\,dB). Initialization alone is therefore helpful but not uniformly so, and XAD-TTS pairs it with alignment supervision.
 
 \subsection{Main results at one hour}
-Table~\ref{tab:main} summarizes the results. Checked and Other are the percentages of checked-syllable and other-syllable vowels whose duration is within $\pm$30\,ms of the natural duration; $\rho$ is the Pearson correlation between synthesized and natural vowel durations of checked syllables; $\Delta$MCD is the MCD difference from Base (1\,h), where negative values are better; and Tone is the accuracy of the tone classifier. The 1\,h system results are averaged over three training seeds. The full-data Base systems, Base (48.0\,h) and Base (47.2\,h), use one training seed, while the natural-recording rows report the classifier accuracy on real speech.
+Table~\ref{tab:main} summarizes the results. Checked and Other are the percentages of checked-syllable and other-syllable vowels whose duration, measured on the synthesized speech, is within $\pm$30\,ms of the natural duration; $\rho$ is the Pearson correlation between synthesized and natural vowel durations of checked syllables; $\Delta$MCD is the MCD difference from Base (1\,h), where negative values are better; and Tone is the accuracy of the tone classifier. The 1\,h system results are averaged over three training seeds. The full-data Base systems, Base (48.0\,h) and Base (47.2\,h), use one training seed, while the natural-recording rows report the classifier accuracy on real speech.
 
 \begin{table}[H]
 \centering
@@ -219,7 +219,7 @@ X             & 76.1 & 78.1 & $-$0.313     & $-$0.252     & 71.8 & 65.6 \\
 +AD           & 77.0 & 77.7 & $-$0.119     & $-$0.096     & 69.0 & 64.2 \\
 AD+DP         & 79.4 & 74.7 & $-$0.093     & $-$0.053     & 68.5 & 63.8 \\
 X+AD          & 79.4 & 80.5 & $-$0.335     & $-$0.271     & 72.7 & 66.9 \\
-XAD           & \textbf{81.3} & \textbf{82.2} & $-$0.332 & $-$0.235 & \textbf{73.0} & \textbf{67.3} \\
+XAD (X+AD+DP) & \textbf{81.3} & \textbf{82.2} & $-$0.332 & $-$0.235 & \textbf{73.0} & \textbf{67.3} \\
 \bottomrule
 \end{tabular}
 \end{table}
