@@ -18,7 +18,7 @@
 
 \begin{document}
 
-\title{Cross-Variety Initialization and Alignment-Supervised Durations for One-Hour Hakka Speech Synthesis}
+\title{Cross-Variety Initialization and Alignment-Supervised Duration Modeling for Hakka TTS with One Hour of Target-Variety Training Data}
 
 \author{\IEEEauthorblockN{Chien-Chih Fang}
 \IEEEauthorblockA{\textit{Master Program in Intelligent}\\
@@ -53,7 +53,7 @@ duration modeling, forced alignment, Hakka, low-resource languages, text-to-spee
 
 \section{Introduction}
 
-Hakka is a Sinitic tonal language spoken in several regional varieties. In Taiwan, Sixian and Hailu are two major Hakka varieties. They share many consonants and vowels but differ in their tone systems. Although Hakka speech technology has begun to emerge~\cite{chen2024voxhakka}, recorded speech resources remain limited for individual varieties, making it difficult to develop TTS systems when only a small amount of target-variety data is available.
+Hakka is a Sinitic tonal language spoken in several regional varieties. In Taiwan, Sixian and Hailu are two major Hakka varieties. They share many consonants and vowels but differ in their tone systems. Although Hakka speech technology has begun to emerge~\cite{chen2024voxhakka}, recorded speech resources remain limited for individual varieties, making it difficult to develop TTS systems when only a small amount of target-variety data is available. Taiwanese Hakka also includes varieties with fewer speakers, such as Dapu, Raoping, and Zhao'an, for which even less recorded speech is typically available.
 
 Many recent neural TTS models are non-autoregressive: a duration predictor first decides how many acoustic frames each input symbol receives, and a decoder then generates speech with that fixed timing~\cite{ren2021fastspeech2,mehta2024matcha}. The predicted durations determine the length of the expanded input representation and strongly influence the timing of the synthesized speech. In tonal languages, vowel duration can affect the time available for realizing a pitch contour, which is an important acoustic cue for lexical tone. In Hakka, timing also matters for checked syllables, which end in an unreleased stop, written as \textit{-b}, \textit{-d}, or \textit{-g} in the romanization used in this study. These syllables typically have short vowel nuclei, so vowel duration is one of the cues that distinguish them from other syllables.
 
@@ -293,7 +293,7 @@ Several limitations should be considered. The aligner was trained on all recordi
 
 \section{Conclusion}
 XAD-TTS combines cross-variety initialization, alignment-supervised durations, and an enlarged duration predictor. With 1\,h of target-variety training speech, XAD-TTS improves checked-syllable duration accuracy, MCD, and objective tone-classification accuracy for both Sixian and Hailu. On the $\pm$30\,ms duration measure, its results are close to those of the full-data Base references. An additional ASR-based analysis shows improved agreement for checked-syllable codas and tone marks relative to the natural-speech transcripts.
-The aligner is not required during synthesis. A 40{,}000-step target-model training run takes approximately two hours on a single RTX~5070~Ti GPU; this time excludes source-model training, forced alignment, and data preparation. A component analysis shows that cross-variety initialization and alignment-supervised durations are complementary. Future work includes listening tests.
+The aligner is not required during synthesis. A 40{,}000-step target-model training run takes approximately two hours on a single RTX~5070~Ti GPU; this time excludes source-model training, forced alignment, and data preparation. A component analysis shows that cross-variety initialization and alignment-supervised durations are complementary. Future work includes listening tests, training the aligner on the one-hour target data only, and applying the recipe to Hakka varieties with fewer recordings, such as Dapu, Raoping, and Zhao'an.
 
 \section*{Acknowledgment}
 The research was funded by the National Science and Technology Council of the Republic of China under contract number NSTC114-2115-M-033-004. HAT was provided by the Hakka Affairs Council/ACLCLP (No.~2024-005). No new recordings or identifiable data were collected, and no conflicts have been declared. The GenAI tool was used to assist with English translation, improve readability, and refine English grammar. After using the tool, the authors reviewed and edited the content as needed and took responsibility for the final technical content.
