@@ -14,11 +14,21 @@
 \pgfplotsset{compat=1.18}
 \usepgfplotslibrary{groupplots}
 
+% 表標改成一行(TABLE I. 標題),與 IEEE Word 範本相同;圖標維持 IEEEtran 原樣
+\makeatletter
+\let\IEEEorig@makecaption\@makecaption
+\long\def\@makecaption#1#2{%
+\ifx\@captype\@IEEEtablestring%
+\footnotesize\bgroup\par\centering\@IEEEtabletopskipstrut{\normalfont\footnotesize #1.\nobreakspace\scshape #2}\par\addvspace{0.5\baselineskip}\egroup%
+\@IEEEtablecaptionsepspace
+\else\IEEEorig@makecaption{#1}{#2}\fi}
+\makeatother
+
 \newcommand{\parhead}[1]{\par\vspace{2pt}\noindent\textbf{#1}\par\nobreak}
 
 \begin{document}
 
-\title{Cross-Variety Initialization and Alignment-Supervised Duration Modeling for Hakka TTS with One Hour of Target-Variety Training Data}
+\title{Cross-Variety Initialization and Alignment-Supervised Duration Modeling for Hakka Text-to-Speech with One Hour of Target-Variety Training Data}
 
 \author{\IEEEauthorblockN{Chien-Chih Fang}
 \IEEEauthorblockA{\textit{Master Program in Intelligent}\\
@@ -66,7 +76,7 @@ For a low-resource Hakka variety, two additional resources can help. First, a cl
 \item \textbf{Evaluation beyond spectral distortion:} In addition to mel-cepstral distortion, segment durations measured on the synthesized waveforms, objective tone classification, and agreement with natural speech in automatic speech recognition (ASR).
 \end{itemize}
 
-\section{Method}
+\section{Methodology}
 
 \subsection{Baseline model}
 The baseline system, denoted Base, uses the original Matcha-TTS architecture~\cite{mehta2024matcha} and is trained from scratch. Matcha-TTS encodes input symbols into per-symbol features and predicts their durations. The features are expanded according to the durations, and a conditional flow-matching decoder~\cite{lipman2023flow} generates a mel spectrogram. A HiFi-GAN vocoder~\cite{kong2020hifigan} then converts the mel spectrogram into a waveform.
@@ -171,7 +181,7 @@ Table~\ref{tab:main} summarizes the results. Checked and Other are the percentag
 
 \begin{table}[H]
 \centering
-\caption{Results for the 1\,h Systems and Full-Data References.}
+\caption{Results for 1\,h and Full-Data Systems.}
 \label{tab:main}
 \footnotesize
 \setlength{\tabcolsep}{3.6pt}
