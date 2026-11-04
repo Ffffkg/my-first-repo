@@ -104,29 +104,32 @@ XAD-TTS combines cross-variety initialization, alignment-supervised durations, a
 \centering
 \begin{tikzpicture}[
   font=\scriptsize,
-  box/.style={draw=blue!45, rounded corners=3pt, align=center, minimum height=8mm, text width=35mm, inner sep=2pt, fill=blue!6},
+  box/.style={draw=blue!45, rounded corners=3pt, align=center, minimum height=8mm, inner sep=2pt, fill=blue!6},
+  small/.style={box, text width=25mm, minimum height=11mm},
+  wide/.style={box, text width=35mm},
   lab/.style={font=\scriptsize, text=black!75, inner sep=1.5pt},
   arr/.style={-{Latex[length=1.5mm]}, gray!70!black}]
-\node[box] (src)   at (0, 0) {Source-variety model\\(47.2 or 48.0\,h)};
-\node[box] (train) at (4.3, 0) {Target-variety training\\speech and text (1\,h)};
-\node[box] (mfa)   at (4.3, -1.5) {MFA forced alignment:\\phone-duration labels};
-\node[box] (tts)   at (0, -3.5) {Target-variety Matcha-TTS\\+ enlarged duration predictor};
-\node[box] (text)  at (4.3, -3.5) {Test text\\(sentences not used in training)};
-\node[box] (syn)   at (0, -5.2) {Synthesized speech};
-\node[box] (eval)  at (0, -6.9) {Evaluation:\\timing, tones, ASR, MCD};
-\node[box] (nat)   at (4.3, -6.9) {Natural recordings of the\\test sentences (reference)};
-% 訓練資料 → MFA
+% 最上層:目標腔訓練資料
+\node[box, text width=33mm] (train) at (2.95, 0) {Target-variety training\\speech and text (1\,h)};
+% 上層:來源模型、MFA、測試文字
+\node[small] (src)  at (0, -1.65)    {Source-variety model\\(47.2 or 48.0\,h)};
+\node[small] (mfa)  at (2.95, -1.65) {MFA forced alignment:\\phone-duration labels};
+\node[small] (text) at (5.9, -1.65)  {Test text\\(sentences not used\\in training)};
+% 中層:目標模型(最大、單獨一列)
+\node[box, text width=84mm, minimum height=11mm, font=\footnotesize] (tts) at (2.95, -3.75) {Target-variety Matcha-TTS + enlarged duration predictor};
+% 下層:合成語音 → 評估 ← 真人錄音
+\node[wide] (syn)  at (0.48, -5.4) {Synthesized speech};
+\node[wide] (eval) at (0.48, -7.0) {Evaluation:\\timing, tones, ASR, MCD};
+\node[wide] (nat)  at (5.42, -7.0) {Natural recordings of the\\test sentences (reference)};
+% 訓練資料 → MFA;訓練資料 → 目標模型(走來源模型與 MFA 之間)
 \draw[arr] (train) -- (mfa);
-% 來源模型 → 目標模型(標籤在線的左邊)
-\draw[arr] (src) -- node[lab, left, align=right]{Cross-variety\\initialization} (tts);
-% 訓練資料 → 目標模型(走兩欄中間)
-\draw[arr] (train.west) -- (2.15,0) -- node[lab, left, align=right, pos=0.5]{Model\\training} (2.15,-2.4) -- (0.75,-2.4) -- (0.75,0 |- tts.north);
-% MFA → 目標模型(從 MFA 左下出發,較短,不與上一條交叉)
-\draw[arr] (2.75,0 |- mfa.south) -- node[lab, right, align=left]{Duration\\supervision} (2.75,-2.7) -- (1.35,-2.7) -- (1.35,0 |- tts.north);
-% 測試文字 → 目標模型(同一列)
-\draw[arr] (text) -- (tts);
-% 目標模型 → 合成語音(標籤在線的左邊)
-\draw[arr] (tts) -- node[lab, left]{Synthesis} (syn);
+\draw[arr] (1.475,0 |- train.south) -- node[lab, left, pos=0.12]{Model training} (1.475,0 |- tts.north);
+% 上層三個框 → 目標模型(標籤都在線的左邊)
+\draw[arr] (0.9,0 |- src.south) -- node[lab, left, align=right]{Cross-variety\\initialization} (0.9,0 |- tts.north);
+\draw[arr] (3.85,0 |- mfa.south) -- node[lab, left, align=right]{Duration\\supervision} (3.85,0 |- tts.north);
+\draw[arr] (6.8,0 |- text.south) -- node[lab, left]{Input} (6.8,0 |- tts.north);
+% 目標模型 → 合成語音 → 評估 ← 真人錄音
+\draw[arr] (0.48,0 |- tts.south) -- node[lab, left]{Synthesis} (syn);
 \draw[arr] (syn) -- (eval);
 \draw[arr] (nat) -- (eval);
 \end{tikzpicture}
