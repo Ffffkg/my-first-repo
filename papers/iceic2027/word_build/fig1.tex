@@ -32,9 +32,9 @@
 % 上層三個框 → 目標模型(標籤都在線的左邊)
 \draw[arr] (0.9,0 |- src.south) -- node[lab, left, align=right]{Cross-variety\\initialization} (0.9,0 |- tts.north);
 \draw[arr] (mfa.south) -- node[lab, right, align=left]{Duration\\supervision} (2.95,0 |- tts.north);
-\draw[arr] (6.8,0 |- text.south) -- node[lab, left]{Input} (6.8,0 |- tts.north);
+\draw[arr] (6.8,0 |- text.south) -- (6.8,0 |- tts.north);
 % 目標模型 → 合成語音 → 評估 ← 真人錄音
-\draw[arr] (2.95,0 |- tts.south) -- node[lab, left]{Synthesis} (syn);
+\draw[arr] (2.95,0 |- tts.south) -- (syn);
 \draw[arr] (syn) -- (eval);
 \draw[arr] (nat) -- (eval);
 \end{tikzpicture}

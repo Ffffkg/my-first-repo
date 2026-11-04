@@ -63,7 +63,7 @@ duration modeling, forced alignment, Hakka, low-resource languages, text-to-spee
 
 \section{Introduction}
 
-Hakka is a Sinitic tonal language spoken in several regional varieties. In Taiwan, Sixian and Hailu are two major Hakka varieties. They share many consonants and vowels but differ in their tone systems. Although Hakka speech technology has begun to emerge~\cite{chen2024voxhakka}, recorded speech resources remain limited for individual varieties, making it difficult to develop TTS systems when only a small amount of target-variety data is available. Taiwanese Hakka also includes varieties with fewer speakers, such as Dapu, Raoping, and Zhao'an, for which even less recorded speech is typically available.
+Hakka is a Sinitic tonal language spoken in several regional varieties. In Taiwan, Sixian and Hailu are two major Hakka varieties. They share many consonants and vowels but differ in their tone systems. Although Hakka speech technology has begun to emerge~\cite{chen2024voxhakka}, recorded speech resources remain limited for individual varieties, making it difficult to develop text-to-speech (TTS) systems when only a small amount of target-variety data is available. Taiwanese Hakka also includes varieties with fewer speakers, such as Dapu, Raoping, and Zhao'an, for which even less recorded speech is typically available.
 
 Many recent neural TTS models are non-autoregressive: a duration predictor first decides how many acoustic frames each input symbol receives, and a decoder then generates speech with that fixed timing~\cite{ren2021fastspeech2,mehta2024matcha}. The predicted durations determine the length of the expanded input representation and strongly influence the timing of the synthesized speech. In tonal languages, vowel duration can affect the time available for realizing a pitch contour, which is an important acoustic cue for lexical tone. In Hakka, timing also matters for checked syllables, which end in an unreleased stop, written as \textit{-b}, \textit{-d}, or \textit{-g} in the romanization used in this study. These syllables typically have short vowel nuclei, so vowel duration is one of the cues that distinguish them from other syllables.
 
@@ -127,9 +127,9 @@ XAD-TTS combines cross-variety initialization, alignment-supervised durations, a
 % 上層三個框 → 目標模型(標籤都在線的左邊)
 \draw[arr] (0.9,0 |- src.south) -- node[lab, left, align=right]{Cross-variety\\initialization} (0.9,0 |- tts.north);
 \draw[arr] (mfa.south) -- node[lab, right, align=left]{Duration\\supervision} (2.95,0 |- tts.north);
-\draw[arr] (6.8,0 |- text.south) -- node[lab, left]{Input} (6.8,0 |- tts.north);
+\draw[arr] (6.8,0 |- text.south) -- (6.8,0 |- tts.north);
 % 目標模型 → 合成語音 → 評估 ← 真人錄音
-\draw[arr] (2.95,0 |- tts.south) -- node[lab, left]{Synthesis} (syn);
+\draw[arr] (2.95,0 |- tts.south) -- (syn);
 \draw[arr] (syn) -- (eval);
 \draw[arr] (nat) -- (eval);
 \end{tikzpicture}
