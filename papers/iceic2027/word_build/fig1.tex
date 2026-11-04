@@ -1,0 +1,32 @@
+\documentclass[10pt,border=2pt]{standalone}
+\usepackage{mathptmx}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta,calc}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\usepgfplotslibrary{groupplots}
+\setlength{\columnwidth}{88.57mm}
+\begin{document}
+\begin{tikzpicture}[
+  font=\scriptsize,
+  box/.style={draw=blue!45, rounded corners=3pt, align=center, minimum height=8mm, text width=35mm, inner sep=2pt, fill=blue!6},
+  tag/.style={draw=blue!35, rounded corners=5pt, fill=white, font=\scriptsize, inner sep=1.5pt, align=center},
+  arr/.style={-{Latex[length=1.5mm]}, gray!70!black}]
+\node[box] (src)   at (0, 0) {Source-variety model\\(47.2 or 48.0\,h)};
+\node[box] (train) at (4.3, 0) {Target-variety training\\speech and text (1\,h)};
+\node[box] (mfa)   at (4.3, -1.7) {MFA forced alignment:\\phone-duration labels};
+\node[box] (tts)   at (0, -3.45) {Target-variety Matcha-TTS\\+ enlarged duration predictor};
+\node[box] (text)  at (4.3, -4.65) {Test text};
+\node[box] (syn)   at (0, -5.85) {Synthesized speech};
+\node[box] (nat)   at (4.3, -5.85) {Natural test speech};
+\node[box, text width=40mm] (eval) at (0.7, -7.55) {Evaluation:\\timing, tones, ASR, MCD};
+\draw[arr] (train) -- (mfa);
+\draw[arr] (src) -- node[tag]{Cross-variety\\initialization} (tts);
+\draw[arr] (train.west) -- (2.15,0) -- node[tag, pos=0.33]{Model training} (2.15,-2.6) -- (1.2,-2.6) -- ([xshift=12mm]tts.north);
+\draw[arr] (mfa.south) |- node[tag, pos=0.3]{Duration\\supervision} ([yshift=-1.5mm]tts.east);
+\draw[arr] (tts) -- node[tag]{Inference after training} (syn);
+\draw[arr] (text.south) |- ([xshift=10mm, yshift=3mm]syn.north) -- ([xshift=10mm]syn.north);
+\draw[arr] (syn.south) -- ([xshift=-6mm]eval.north);
+\draw[arr] (nat.south) |- ([xshift=12mm, yshift=3mm]eval.north) -- ([xshift=12mm]eval.north);
+\end{tikzpicture}
+\end{document}
