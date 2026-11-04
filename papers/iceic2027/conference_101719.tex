@@ -181,7 +181,7 @@ Table~\ref{tab:main} summarizes the results. Checked and Other are the percentag
 
 \begin{table}[H]
 \centering
-\caption{Results for 1\,h and Full-Data Systems.}
+\caption{Results for \textnormal{1\,h} and Full-Data Systems.}
 \label{tab:main}
 \footnotesize
 \setlength{\tabcolsep}{3.6pt}
@@ -214,7 +214,7 @@ To separate the components of XAD-TTS, two further systems were trained with the
 
 \begin{table}[H]
 \centering
-\caption{Component Analysis at 1\,h.}
+\caption{Component Analysis at \textnormal{1\,h}.}
 \label{tab:ablation}
 \footnotesize
 \setlength{\tabcolsep}{2.6pt}
@@ -297,7 +297,7 @@ The ASR analysis provides an additional evaluation that does not directly use th
 Several additions to XAD were compared directly with XAD: inference-time scaling of vowel durations (three seeds), a higher dropout rate in the duration predictor, pre-training of the duration predictor on source-variety durations, replay of source-variety data during target training (one training seed each), and averaging the predicted durations of the three seeds. None of them provided consistent improvements over XAD under the evaluated settings.
 
 \section{Discussion and Limitations}
-At 1\,h of target-variety training data, cross-variety initialization and alignment-supervised durations each improve checked-syllable duration accuracy, and their combination improves it further, so the two main components of XAD-TTS are complementary. Initialization also accounts for most of the spectral and tonal gains, whereas the enlarged predictor adds a smaller timing gain that is consistent only in combination with initialization.
+At 1\,h of target-variety training data, cross-variety initialization and alignment-supervised durations each improve checked-syllable duration accuracy, and their combination improves it further, so the two main components of XAD-TTS are complementary. Initialization also accounts for most of the spectral and tonal gains, whereas the enlarged predictor adds a smaller timing gain that is consistent only in combination with initialization. This pattern is consistent with the two components addressing different weaknesses: initialization supplies acoustic knowledge from the source variety, while alignment supervision replaces the duration targets that MAS would estimate from one hour of speech. Because the source model is trained once and reused, each additional variety or speaker needs only about one hour of recordings for the TTS model, although the aligner here used more target-variety speech.
 
 Several limitations should be considered. The aligner was trained on all recordings of each variety, including the validation and test recordings, and therefore uses more target-variety speech than the one-hour TTS training subset. To check that this does not drive the timing results, the natural test recordings and the synthesized speech were re-aligned with an MFA model trained on the training data only. The natural vowel durations changed by 5.8 and 5.3\,ms on average (Sixian and Hailu; $r=0.98$ and $0.99$), the ranking of Base, +AD, and XAD was unchanged, and the checked-syllable gain of XAD over Base was 10.0 [6.6, 13.5] and 11.3 [7.6, 15.1] percentage points, compared with 10.3 and 12.8 in Table~\ref{tab:main}; the gain of +AD was 5.9 and 5.6 percentage points. Because MFA is still used for both duration supervision and timing evaluation, alignment errors may affect both stages, although all systems, including Base, are measured with the same aligner. In addition, the full-data Base reference uses one training seed, and in Table~\ref{tab:transfer} the best validation checkpoint of every initialized model occurred at the first or second validation point (1{,}000 or 2{,}000 steps), so a finer validation interval might change these values. The ASR model and tone classifier are imperfect evaluation tools; on natural speech, the classifier reaches 71.5\% accuracy for Sixian and 67.1\% for Hailu.
 
