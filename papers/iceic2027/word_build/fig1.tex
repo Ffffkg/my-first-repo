@@ -11,7 +11,7 @@
   font=\scriptsize,
   box/.style={draw=blue!45, rounded corners=3pt, align=center, minimum height=8mm, inner sep=2pt, fill=blue!6},
   small/.style={box, text width=25mm, minimum height=11mm},
-  wide/.style={box, text width=35mm},
+  wide/.style={box, text width=30mm},
   lab/.style={font=\scriptsize, text=black!75, inner sep=1.5pt},
   arr/.style={-{Latex[length=1.5mm]}, gray!70!black}]
 % 最上層:目標腔訓練資料
@@ -23,18 +23,18 @@
 % 中層:目標模型(最大、單獨一列)
 \node[box, text width=84mm, minimum height=11mm, font=\footnotesize] (tts) at (2.95, -3.75) {Target-variety Matcha-TTS + enlarged duration predictor};
 % 下層:合成語音 → 評估 ← 真人錄音
-\node[wide] (syn)  at (0.48, -5.4) {Synthesized speech};
-\node[wide] (eval) at (0.48, -7.0) {Evaluation:\\timing, tones, ASR, MCD};
-\node[wide] (nat)  at (5.42, -7.0) {Natural recordings of the\\test sentences (reference)};
+\node[wide] (syn)  at (2.95, -5.4) {Synthesized speech};
+\node[wide] (eval) at (2.95, -7.0) {Evaluation:\\timing, tones, ASR, MCD};
+\node[box, text width=21mm] (nat) at (6.1, -7.0) {Natural recordings\\of the test sentences\\(reference)};
 % 訓練資料 → MFA;訓練資料 → 目標模型(走來源模型與 MFA 之間)
 \draw[arr] (train) -- (mfa);
 \draw[arr] (1.475,0 |- train.south) -- node[lab, left, pos=0.12]{Model training} (1.475,0 |- tts.north);
 % 上層三個框 → 目標模型(標籤都在線的左邊)
 \draw[arr] (0.9,0 |- src.south) -- node[lab, left, align=right]{Cross-variety\\initialization} (0.9,0 |- tts.north);
-\draw[arr] (3.85,0 |- mfa.south) -- node[lab, left, align=right]{Duration\\supervision} (3.85,0 |- tts.north);
+\draw[arr] (mfa.south) -- node[lab, right, align=left]{Duration\\supervision} (2.95,0 |- tts.north);
 \draw[arr] (6.8,0 |- text.south) -- node[lab, left]{Input} (6.8,0 |- tts.north);
 % 目標模型 → 合成語音 → 評估 ← 真人錄音
-\draw[arr] (0.48,0 |- tts.south) -- node[lab, left]{Synthesis} (syn);
+\draw[arr] (2.95,0 |- tts.south) -- node[lab, left]{Synthesis} (syn);
 \draw[arr] (syn) -- (eval);
 \draw[arr] (nat) -- (eval);
 \end{tikzpicture}
