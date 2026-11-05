@@ -30,7 +30,7 @@ const emptyBorders = { top: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" 
   left: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" }, right: { style: BorderStyle.NONE, size: 0, color: "FFFFFF" } };
 
 function figure(b) {
-  const pdfSize = { "fig1.png": [246.479, 229.029], "fig2.png": [241.218, 133.154] }[b.img];
+  const pdfSize = { "fig1.png": [246.479, 213.439], "fig2.png": [241.218, 118.17] }[b.img];
   const px = (pt) => Math.round((pt / 72) * 96);
   body.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 120, after: 60 }, keepNext: true,
     children: [new ImageRun({ type: "png", data: fs.readFileSync(path.join(DIR, b.img)),

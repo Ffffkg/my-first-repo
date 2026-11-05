@@ -8,6 +8,7 @@
 \usepackage{booktabs}
 \usepackage{multirow}
 \usepackage{float}
+\usepackage{flafter}   % 浮動的圖一定出現在第一次被提到之後
 \usepackage{enumitem}
 \usepackage{tikz}
 \usetikzlibrary{positioning,arrows.meta,calc}
@@ -97,7 +98,7 @@ Matcha-TTS inserts blank tokens between input symbols. Silence between two phone
 \subsection{Larger duration predictor and rounding}
 To increase the capacity of the duration predictor, its kernel size is changed from 3 to 5 and its number of channels from 256 to 512. With its two convolution layers, each prediction then depends on nine neighboring input symbols instead of five. When cross-variety initialization is applied in XAD-TTS, the enlarged duration predictor and speaker embeddings are re-initialized.
 
-Rounding every predicted duration up can lengthen the total duration. Each trained model therefore uses either rounding up or cumulative rounding (rounding the running sum, which preserves the total length), chosen on the validation set only: the rule whose rounded vowel-nucleus durations have the smaller mean absolute error with respect to the MFA durations, averaged over checked and other syllables, is selected. The same procedure is applied to all systems, including Base.
+Rounding every predicted duration up can lengthen the total duration. Each trained model therefore uses either rounding up or cumulative rounding (rounding the running sum, which preserves the total length), chosen on the validation set only: the rule whose rounded vowel-nucleus durations have the smaller mean absolute error with respect to the MFA durations, averaged over checked and unchecked syllables, is selected. The same procedure is applied to all systems, including Base.
 
 XAD-TTS combines cross-variety initialization, alignment-supervised durations, and the enlarged duration predictor; its name refers to cross-variety initialization (X) and alignment-supervised durations (AD). Fig.~\ref{fig:overview} illustrates the training, synthesis, and evaluation procedures. The target model is initialized from the source-variety model and trained on the one-hour target training speech and text, while MFA-derived durations from the same data provide supervision for the enlarged duration predictor and alignment information for training. After training, the model synthesizes speech from test text, that is, sentences not used in training, and the synthesized speech is evaluated against natural recordings of the same sentences.
 
@@ -119,9 +120,9 @@ XAD-TTS combines cross-variety initialization, alignment-supervised durations, a
 % 中層:目標模型(最大、單獨一列)
 \node[box, text width=84mm, minimum height=11mm, font=\footnotesize] (tts) at (2.95, -3.75) {Target-variety Matcha-TTS + enlarged duration predictor};
 % 下層:合成語音 → 評估 ← 真人錄音
-\node[wide] (syn)  at (2.95, -5.4) {Synthesized speech};
-\node[wide] (eval) at (2.95, -7.0) {Evaluation:\\timing, tones, ASR, MCD};
-\node[box, text width=24mm] (nat) at (5.95, -7.0) {Natural recordings\\of test sentences\\(reference)};
+\node[wide] (syn)  at (2.95, -5.1) {Synthesized speech};
+\node[wide] (eval) at (2.95, -6.45) {Evaluation:\\timing, tones, ASR, MCD};
+\node[box, text width=24mm] (nat) at (5.95, -6.45) {Natural recordings\\of test sentences\\(reference)};
 % 訓練資料 → MFA;訓練資料 → 目標模型(走來源模型與 MFA 之間)
 \draw[arr] (train) -- (mfa);
 \draw[arr] (1.475,0 |- train.south) -- node[lab, left, pos=0.12]{Model training} (1.475,0 |- tts.north);
@@ -144,28 +145,28 @@ XAD-TTS combines cross-variety initialization, alignment-supervised durations, a
 The experiments use the TTS part of the Hakka Across Taiwan (HAT) corpus~\cite{hat2024}: read speech in Sixian and Hailu, each by one professional female and one professional male speaker. Utterances with code-switching or syllable contractions are excluded. Validation and test sets are defined by recording prompt, so their prompts never occur in training of the same variety. Training subsets of 1\,h and 10\,h are balanced across the two speakers and nested (the 10\,h set contains the 1\,h set). Each syllable is split into initial, vowel, and final consonant by fixed rules. In the main experiments, the tone is attached to the vowel, so a vowel with a given tone is one symbol (``joint'' symbols). The first results experiment also tests ``separate'' symbols, in which the tone is a separate input; the two varieties then share 84\% of their symbols instead of 55\%.
 
 \subsection{Systems and training}
-Three systems are compared, all with joint symbols: Base, the original Matcha-TTS baseline trained from scratch with MAS durations; +AD, trained from scratch with alignment-supervised durations (AD) only; and XAD, the full XAD-TTS recipe, which adds cross-variety initialization and the enlarged predictor to +AD. Each is trained with Adam (learning rate $10^{-4}$, batch 16) for a fixed 40{,}000 steps with three training seeds (1234, 123, 2026) at 1\,h and 10\,h, and the 40{,}000-step checkpoint is evaluated. As a high-resource reference, Base is also trained on the full pool (48.0\,h of Sixian, 47.2\,h of Hailu) with early stopping and a single seed. One 40{,}000-step run takes about 2\,h on a single RTX~5070~Ti GPU; Base has 20.9\,M parameters and XAD 22.4\,M.
+Three systems are compared, all with joint symbols: Base, the original Matcha-TTS baseline trained from scratch with MAS durations; +AD, trained from scratch with alignment-supervised durations (AD) only; and XAD, the full XAD-TTS recipe, which adds cross-variety initialization and the enlarged predictor to +AD. Each is trained with Adam (learning rate $10^{-4}$, batch 16) for a fixed 40{,}000 steps, so that all systems have the same training budget; this exceeds the step at which the 1\,h models trained from scratch reached their lowest validation loss in preliminary runs (21{,}000--33{,}000). Three training seeds (1234, the Matcha-TTS default, 123, and 2026), which change the random initialization and data order, are used at 1\,h and 10\,h so that differences do not stem from a single run, and the 40{,}000-step checkpoint is evaluated. As a high-resource reference, Base is also trained on the full pool (48.0\,h of Sixian, 47.2\,h of Hailu) with early stopping and a single seed. One 40{,}000-step run takes about 2\,h on a single RTX~5070~Ti GPU; Base has 20.9\,M parameters and XAD 22.4\,M.
 Synthesis uses 10 sampling steps of the flow-matching decoder, temperature 0.667, and the universal HiFi-GAN vocoder.
 
 \subsection{Evaluation}
-For each variety, 100 test sentences (50 per speaker) are randomly sampled from the test set and synthesized by every system. The text of 3 Sixian and 10 Hailu sentences also occurs in the training data of the other variety, which the source model may have seen; excluding them changes the checked-syllable gain of XAD over Base by at most 0.2 percentage points and its MCD reduction by at most 0.005\,dB, so all sentences are kept. 95\% confidence intervals (CIs) are obtained by resampling sentences 5{,}000 times; with several seeds, every seed uses the same resampled sentences. Values in square brackets denote these 95\% CIs.
+For each variety, 100 test sentences (50 per speaker) are randomly sampled from the test set and synthesized by every system. Excluding the 3 Sixian and 10 Hailu sentences whose text also occurs in the other variety's training data, which the source model may have seen, changes the checked-syllable gain of XAD over Base by at most 0.2 percentage points and its MCD reduction by at most 0.005\,dB, so all sentences are kept. 95\% confidence intervals (CIs) are obtained by resampling sentences 5{,}000 times; with several seeds, every seed uses the same resampled sentences. Values in square brackets denote these 95\% CIs.
 
 \parhead{Spectral distortion}
-Mel-cepstral distortion (MCD)~\cite{kubichek1993mcd} is computed on 24 WORLD~\cite{morise2016world} mel-cepstral coefficients (without $c_0$) after dynamic time warping and averaged over five generation seeds per sentence.
+Mel-cepstral distortion (MCD)~\cite{kubichek1993mcd} is computed on 24 mel-cepstral coefficients (without $c_0$) extracted from the waveforms after dynamic time warping and averaged over five generation seeds per sentence.
 
 \parhead{Segment timing}
-Each synthesized waveform is force-aligned with the same MFA model, and the duration of every vowel nucleus is compared with the same nucleus in the natural recording. Timing accuracy is the share of nuclei within $\pm$30\,ms (2.6 frames) of the natural duration, reported separately for checked and other syllables, together with the Pearson correlation $\rho$ of checked-syllable nucleus durations. At 1\,h, tolerances of $\pm$20 and $\pm$50\,ms give the same ranking of Base, +AD, and XAD.
+Each synthesized waveform is force-aligned with the same MFA model, and the duration of every vowel nucleus is compared with the same nucleus in the natural recording. Timing accuracy is the share of nuclei within $\pm$30\,ms (2.6 frames) of the natural duration, reported separately for checked and unchecked syllables, together with the Pearson correlation $\rho$ of checked-syllable nucleus durations. At 1\,h, tolerances of $\pm$20 and $\pm$50\,ms give the same ranking of Base, +AD, and XAD.
 
 \parhead{Tone recognition}
 A gradient-boosting classifier is trained on up to 3{,}000 natural utterances of the full training pool with acoustic features only: a five-point F0 contour of the nucleus in semitones relative to the speaker median, its mean and slope, log-duration, voicing ratio, and the F0 of neighboring syllables. Its accuracy on the synthesized syllables is reported, and its accuracy on all natural test recordings serves as a reference.
 
 \parhead{Speech recognition check}
-The 1B Omnilingual ASR model~\cite{omnilingual2025}, set to Hakka, transcribes Hakka in a romanization with tone diacritics and stop codas \textit{-p}, \textit{-t}, \textit{-k}. Each natural recording and its synthetic versions are transcribed, and the transcripts are aligned word by word. The measures are the character error rate (CER) between the ASR transcript of synthesized speech and that of the corresponding natural recording, computed on Latin letters and tone marks with spaces, digits, and non-Latin characters removed and pooled over sentences, the retention of checked syllables (natural-transcript words ending in \textit{-p}/\textit{-t}/\textit{-k} whose aligned synthetic word still does), the letter-similarity gap between checked and other words, and the tone-mark agreement of aligned words. Twenty of the 200 test sentences (12 Sixian, 8 Hailu) are excluded because the recognizer's output for the natural recording was mostly non-Latin text; the remaining 180 sentences are the same for all systems, and the results are pooled over the two varieties. Copy-synthesis, in which natural mel spectrograms are passed through the same vocoder, serves as a reference condition.
+The 1B Omnilingual ASR model~\cite{omnilingual2025}, set to Hakka, transcribes Hakka in a romanization with tone diacritics and stop codas \textit{-p}, \textit{-t}, \textit{-k}. Each natural recording and its synthetic versions are transcribed, and the transcripts are aligned word by word. The measures are the character error rate (CER) between the ASR transcript of synthesized speech and that of the corresponding natural recording, computed on Latin letters and tone marks with spaces, digits, and non-Latin characters removed and pooled over sentences, the retention of checked syllables (natural-transcript words ending in \textit{-p}/\textit{-t}/\textit{-k} whose aligned synthetic word still does), the letter-similarity gap between checked and unchecked words, and the tone-mark agreement of aligned words. Twenty of the 200 test sentences (12 Sixian, 8 Hailu) are excluded because the recognizer's output for the natural recording was mostly non-Latin text; the remaining 180 sentences are the same for all systems, and the results are pooled over the two varieties. Copy-synthesis, in which natural mel spectrograms are passed through the same vocoder, serves as a reference condition.
 
 \section{Results}
 
 \subsection{Cross-variety initialization}
-In a preliminary sweep over five data sizes from 1 to 48\,h, initialization lowered the validation loss in 16 of 20 settings; the gain was largest at 1\,h (0.08--0.13) and was close to zero under the full-data conditions (48.0 and 47.2\,h), so the analysis focuses on 1\,h. Table~\ref{tab:transfer} compares MCD between training from scratch and cross-variety initialization with 1\,h of target-variety data and one training seed. Each model is trained for 40{,}000 steps with validation every 1{,}000 steps, and the checkpoint with the lowest validation loss is evaluated; this differs from the main experiments, where the 40{,}000-step checkpoint is evaluated. Scratch and Init.\ give the MCD (dB) of the model trained from scratch and of the initialized model, and $\Delta$ is the MCD of the initialized model minus that of the model trained from scratch, computed per sentence from unrounded values, so it can differ by 0.01 from the difference of the rounded means. The 95\% CI in brackets is obtained by resampling sentences 10{,}000 times within each speaker. Table~\ref{tab:transfer} uses its own 100 test sentences without these overlapping texts, so its MCD values are not comparable with those of the main experiments.
+In a preliminary sweep over five data sizes from 1 to 48\,h, initialization lowered the validation loss in 16 of 20 settings; the gain was largest at 1\,h (0.08--0.13) and was close to zero under the full-data conditions (48.0 and 47.2\,h), so the analysis focuses on 1\,h. Table~\ref{tab:transfer} compares MCD between training from scratch and cross-variety initialization with 1\,h of target-variety data and one training seed. Each model is trained for 40{,}000 steps with validation every 1{,}000 steps, and the checkpoint with the lowest validation loss is evaluated; this differs from the main experiments, where the 40{,}000-step checkpoint is evaluated. Scratch and Initialized give the MCD (dB) of the model trained from scratch and of the initialized model, and $\Delta$ is the MCD of the initialized model minus that of the model trained from scratch, computed per sentence from unrounded values, so it can differ by 0.01 from the difference of the rounded means. The 95\% CI in brackets is obtained by resampling sentences 10{,}000 times within each speaker. Table~\ref{tab:transfer} uses its own 100 test sentences without these overlapping texts, so its MCD values are not comparable with those of the main experiments.
 
 \begin{table}[H]
 \centering
@@ -174,7 +175,7 @@ In a preliminary sweep over five data sizes from 1 to 48\,h, initialization lowe
 \footnotesize
 \begin{tabular}{llccc}
 \toprule
-Target & Symbols & Scratch & Init. & $\Delta$ [95\% CI] \\
+Target & Symbols & Scratch & Initialized & $\Delta$ [95\% CI] \\
 \midrule
 Sixian & joint    & 6.36 & 5.99 & $-$0.36 [$-$0.39, $-$0.34] \\
 Sixian & separate & 6.17 & 6.08 & $-$0.09 [$-$0.12, $-$0.06] \\
@@ -187,7 +188,7 @@ Hailu  & separate & 6.48 & 6.22 & $-$0.26 [$-$0.30, $-$0.22] \\
 Initialization lowers MCD in three of four settings, by up to 0.36\,dB, but raises it for Hailu with joint symbols (+0.13\,dB), mostly for the male speaker (+0.35\,dB vs.\ $-$0.08\,dB). Initialization alone is therefore helpful but not uniformly so, and XAD-TTS pairs it with alignment supervision.
 
 \subsection{Main results at one hour}
-Table~\ref{tab:main} summarizes the results. Checked and Other are the percentages of checked-syllable and other-syllable vowels whose duration, measured on the synthesized speech, is within $\pm$30\,ms of the natural duration; $\rho$ is the Pearson correlation between synthesized and natural vowel durations of checked syllables; $\Delta$MCD is the MCD difference from Base (1\,h), where negative values are better; and Tone is the accuracy of the tone classifier. The 1\,h system results are averaged over three training seeds. The full-data Base systems, Base (48.0\,h) and Base (47.2\,h), use one training seed, while the natural-recording rows report the classifier accuracy on real speech.
+Table~\ref{tab:main} summarizes the results. Checked and Unchecked are the percentages of checked-syllable and unchecked-syllable vowels whose duration, measured on the synthesized speech, is within $\pm$30\,ms of the natural duration; $\rho$ is the Pearson correlation between synthesized and natural vowel durations of checked syllables; $\Delta$MCD is the MCD difference from Base (1\,h), where negative values are better; and Tone is the accuracy of the tone classifier. The 1\,h system results are averaged over three training seeds. The full-data Base systems, Base (48.0\,h) and Base (47.2\,h), use one training seed, while the natural-recording rows report the classifier accuracy on real speech.
 
 \begin{table}[H]
 \centering
@@ -197,7 +198,7 @@ Table~\ref{tab:main} summarizes the results. Checked and Other are the percentag
 \setlength{\tabcolsep}{3.6pt}
 \begin{tabular}{lccccc}
 \toprule
-System & Checked & Other & $\rho$ & $\Delta$MCD & Tone \\
+System & Checked & Unchecked & $\rho$ & $\Delta$MCD & Tone \\
  & (\%) $\uparrow$ & (\%) $\uparrow$ & $\uparrow$ & (dB) $\downarrow$ & (\%) $\uparrow$ \\
 \midrule
 \multicolumn{6}{l}{\textit{Sixian}} \\
@@ -217,7 +218,7 @@ Natural recordings & ---  & ---  & ---   & ---            & 67.1 \\
 \end{tabular}
 \end{table}
 
-Both +AD and XAD improve the measured duration accuracy over Base, and XAD provides further gains over +AD under the evaluated settings. Alignment supervision alone (+AD) raises the share of checked-syllable vowels within $\pm$30\,ms by 6.0 (Sixian) and 8.3 (Hailu) percentage points. XAD adds another 4.3 and 4.5 points, reaching 81.3\% [77.6, 85.2] and 82.2\% [78.0, 86.4] against 71.0\% [66.9, 75.2] and 69.4\% [65.3, 73.8] for Base, which is close to the high-resource references (81.1\% and 83.0\%) for this measure. Put differently, the share of checked-syllable vowels outside the tolerance falls from 29.0\% to 18.7\% for Sixian and from 30.6\% to 17.8\% for Hailu, a reduction of about 36\% and 42\%. Other syllables improve by similar amounts (63.7\% to 74.0\% and 54.9\% to 65.9\%), so the gain is not limited to checked syllables, and the correlation of checked-syllable durations rises from 0.54 to 0.74 (Sixian) and from 0.58 to 0.74 (Hailu), still below the references (0.77 and 0.80). A higher correlation means that the synthesized durations follow the natural pattern of shorter and longer checked vowels more closely, rather than only being closer on average. XAD lowers MCD by 0.33 [0.31, 0.35] and 0.24 [0.20, 0.28]\,dB, two to three times the reduction from +AD (0.12 and 0.10\,dB), and the XAD reduction is observed for all three seeds. Tone-classification accuracy rises by 8.8 [7.7, 9.9] and 5.3 [4.4, 6.2] percentage points and XAD exceeds +AD by 4.1 and 3.2 percentage points. Because the classifier uses vowel duration and the F0 of neighboring syllables in addition to the F0 contour, part of this gain may reflect improved timing. These paired differences are pooled over seeds and syllables and can differ by 0.1 from the rounded means in Table~\ref{tab:main}. The classifier accuracy on XAD-generated speech is close to that on natural recordings (measured on all test sentences). This does not imply that the synthesized tones are more natural or more accurate than human speech.
+Both +AD and XAD improve the measured duration accuracy over Base, and XAD provides further gains over +AD under the evaluated settings. Alignment supervision alone (+AD) raises the share of checked-syllable vowels within $\pm$30\,ms by 6.0 (Sixian) and 8.3 (Hailu) percentage points. XAD adds another 4.3 and 4.5 points, reaching 81.3\% [77.6, 85.2] and 82.2\% [78.0, 86.4] against 71.0\% [66.9, 75.2] and 69.4\% [65.3, 73.8] for Base, which is close to the high-resource references (81.1\% and 83.0\%) for this measure. Unchecked syllables improve by similar amounts (63.7\% to 74.0\% and 54.9\% to 65.9\%), so the gain is not limited to checked syllables, and the correlation of checked-syllable durations rises from 0.54 to 0.74 (Sixian) and from 0.58 to 0.74 (Hailu), still below the references (0.77 and 0.80). XAD lowers MCD by 0.33 [0.31, 0.35] and 0.24 [0.20, 0.28]\,dB, two to three times the reduction from +AD (0.12 and 0.10\,dB), and the XAD reduction is observed for all three seeds. Tone-classification accuracy rises by 8.8 [7.7, 9.9] and 5.3 [4.4, 6.2] percentage points and XAD exceeds +AD by 4.1 and 3.2 percentage points. Because the classifier uses vowel duration and the F0 of neighboring syllables in addition to the F0 contour, part of this gain may reflect improved timing. These paired differences are pooled over seeds and syllables and can differ by 0.1 from the rounded means in Table~\ref{tab:main}. The classifier accuracy on XAD-generated speech is close to that on natural recordings (measured on all test sentences). This does not imply that the synthesized tones are more natural or more accurate than human speech.
 
 \subsection{Component analysis}
 To separate the components of XAD-TTS, two further systems were trained with the same protocol and seeds: X, which uses cross-variety initialization with MAS durations, and AD+DP, which adds the enlarged duration predictor (DP) to +AD without initialization. X+AD denotes XAD without the enlarged predictor. Table~\ref{tab:ablation} lists checked-syllable accuracy, $\Delta$MCD relative to Base (1\,h), and tone-classification accuracy for all six systems.
@@ -249,12 +250,12 @@ Both main components help on their own: X and +AD raise checked-syllable accurac
 \subsection{Effect of data size}
 Fig.~\ref{fig:size} compares checked-syllable duration accuracy at 1\,h and 10\,h of target-variety training data, with three training seeds per system. The full-data Base references use one training seed. For the 1\,h systems and the full-data references, the 95\% CIs span about $\pm$4 percentage points.
 
-\begin{figure}[H]
+\begin{figure}[!t]
 \centering
 \begin{tikzpicture}
 \begin{groupplot}[
   group style={group size=2 by 1, horizontal sep=6mm, y descriptions at=edge left},
-  width=0.56\columnwidth, height=0.5\columnwidth,
+  width=0.56\columnwidth, height=0.45\columnwidth,
   xtick=data, enlarge x limits=0.2,
   ymin=66, ymax=86, ytick={70,75,80,85}, ymajorgrids, grid style={gray!25},
   tick label style={font=\footnotesize}, label style={font=\footnotesize}, title style={font=\footnotesize, yshift=-1.5mm},
@@ -278,7 +279,7 @@ Fig.~\ref{fig:size} compares checked-syllable duration accuracy at 1\,h and 10\,
 The gains over Base are smaller at 10\,h than at 1\,h. At 10\,h, XAD improves checked-syllable duration accuracy by 2.0 percentage points for Sixian and 3.5 percentage points for Hailu. It also reduces MCD by 0.24\,dB and 0.16\,dB, respectively, whereas +AD has MCD differences of +0.04\,dB and +0.03\,dB relative to Base. At 1\,h, XAD achieves duration accuracy close to the full-data Base references on the $\pm$30\,ms measure; XAD additionally uses the source-variety model, so this comparison does not imply that only one hour of Hakka speech is involved.
 
 \subsection{Speech recognition check}
-Table~\ref{tab:asr} presents ASR-based results pooled across the two varieties using 180 test sentences. The measures include CER between the synthetic-speech and natural-speech ASR transcripts, checked-coda retention, the letter-similarity gap (Gap) between checked and other words, and tone-mark agreement. Copy-synthesis is included as a reference condition.
+Table~\ref{tab:asr} presents ASR-based results pooled across the two varieties using 180 test sentences. The measures include CER between the synthetic-speech and natural-speech ASR transcripts, checked-coda retention, the letter-similarity gap (Gap) between checked and unchecked words, and tone-mark agreement. Copy-synthesis is included as a reference condition.
 
 \begin{table}[H]
 \centering
@@ -313,7 +314,7 @@ Several limitations should be considered. The aligner was trained on all recordi
 
 \section{Conclusion}
 XAD-TTS combines cross-variety initialization, alignment-supervised durations, and an enlarged duration predictor. With 1\,h of target-variety training speech, XAD-TTS improves checked-syllable duration accuracy, MCD, and objective tone-classification accuracy for both Sixian and Hailu. On the $\pm$30\,ms duration measure, its results are close to those of the full-data Base references. An additional ASR-based analysis shows improved agreement for checked-syllable codas and tone marks relative to the natural-speech transcripts. These findings hold when overlapping test texts are excluded and when the aligner is retrained on training data only.
-The aligner is not required during synthesis. A 40{,}000-step target-model training run takes approximately two hours on a single RTX~5070~Ti GPU; this time excludes source-model training, forced alignment, and data preparation. A component analysis shows that cross-variety initialization and alignment-supervised durations are complementary. Future work includes listening tests, training the aligner on the one-hour target data only, and applying the recipe to Hakka varieties with fewer recordings, such as Dapu, Raoping, and Zhao'an.
+A 40{,}000-step target-model training run takes approximately two hours on a single RTX~5070~Ti GPU; this time excludes source-model training, forced alignment, and data preparation. A component analysis shows that cross-variety initialization and alignment-supervised durations are complementary. Future work includes listening tests, training the aligner on the one-hour target data only, and applying the recipe to Hakka varieties with fewer recordings, such as Dapu, Raoping, and Zhao'an.
 
 \section*{Acknowledgment}
 The research was funded by the National Science and Technology Council of the Republic of China under contract number NSTC114-2115-M-033-004. HAT was provided by the Hakka Affairs Council/ACLCLP (No.~2024-005). No new recordings or identifiable data were collected, and no conflicts have been declared. The GenAI tool was used to assist with English translation, improve readability, and refine English grammar. After using the tool, the authors reviewed and edited the content as needed and took responsibility for the final technical content.
@@ -407,11 +408,6 @@ J.~Kong, J.~Kim, and J.~Bae, ``{HiFi-GAN}: Generative adversarial networks for
 R.~F. Kubichek, ``Mel-cepstral distance measure for objective speech quality
   assessment,'' in \emph{Proc. IEEE Pacific Rim Conf. Communications, Computers
   and Signal Processing}, 1993.
-
-\bibitem{morise2016world}
-M.~Morise, F.~Yokomori, and K.~Ozawa, ``{WORLD}: A vocoder-based high-quality
-  speech synthesis system for real-time applications,'' \emph{IEICE Trans. Inf.
-  \& Syst.}, vol. E99-D, no.~7, pp. 1877--1884, 2016.
 
 \bibitem{omnilingual2025}
 {Omnilingual ASR team}, ``Omnilingual {ASR}: Open-source multilingual speech

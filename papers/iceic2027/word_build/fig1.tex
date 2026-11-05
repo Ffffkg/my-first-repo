@@ -23,9 +23,9 @@
 % 中層:目標模型(最大、單獨一列)
 \node[box, text width=84mm, minimum height=11mm, font=\footnotesize] (tts) at (2.95, -3.75) {Target-variety Matcha-TTS + enlarged duration predictor};
 % 下層:合成語音 → 評估 ← 真人錄音
-\node[wide] (syn)  at (2.95, -5.4) {Synthesized speech};
-\node[wide] (eval) at (2.95, -7.0) {Evaluation:\\timing, tones, ASR, MCD};
-\node[box, text width=24mm] (nat) at (5.95, -7.0) {Natural recordings\\of test sentences\\(reference)};
+\node[wide] (syn)  at (2.95, -5.1) {Synthesized speech};
+\node[wide] (eval) at (2.95, -6.45) {Evaluation:\\timing, tones, ASR, MCD};
+\node[box, text width=24mm] (nat) at (5.95, -6.45) {Natural recordings\\of test sentences\\(reference)};
 % 訓練資料 → MFA;訓練資料 → 目標模型(走來源模型與 MFA 之間)
 \draw[arr] (train) -- (mfa);
 \draw[arr] (1.475,0 |- train.south) -- node[lab, left, pos=0.12]{Model training} (1.475,0 |- tts.north);
