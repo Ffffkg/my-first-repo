@@ -8,11 +8,11 @@
 \setlength{\columnwidth}{88.57mm}
 \begin{document}
 \begin{tikzpicture}[
-  font=\scriptsize,
+  font=\footnotesize,
   box/.style={draw=blue!45, rounded corners=3pt, align=center, minimum height=8mm, inner sep=2pt, fill=blue!6},
   small/.style={box, text width=25mm, minimum height=11mm},
-  wide/.style={box, text width=30mm},
-  lab/.style={font=\scriptsize, text=black!75, inner sep=1.5pt},
+  wide/.style={box, text width=26mm},
+  lab/.style={font=\footnotesize, text=black!75, inner sep=1.5pt},
   arr/.style={-{Latex[length=1.5mm]}, gray!70!black}]
 % 最上層:目標腔訓練資料
 \node[box, text width=33mm] (train) at (2.95, 0) {Target-variety training\\speech and text (1\,h)};
@@ -25,7 +25,7 @@
 % 下層:合成語音 → 評估 ← 真人錄音
 \node[wide] (syn)  at (2.95, -5.4) {Synthesized speech};
 \node[wide] (eval) at (2.95, -7.0) {Evaluation:\\timing, tones, ASR, MCD};
-\node[box, text width=21mm] (nat) at (6.1, -7.0) {Natural recordings\\of the test sentences\\(reference)};
+\node[box, text width=24mm] (nat) at (5.95, -7.0) {Natural recordings\\of test sentences\\(reference)};
 % 訓練資料 → MFA;訓練資料 → 目標模型(走來源模型與 MFA 之間)
 \draw[arr] (train) -- (mfa);
 \draw[arr] (1.475,0 |- train.south) -- node[lab, left, pos=0.12]{Model training} (1.475,0 |- tts.north);
