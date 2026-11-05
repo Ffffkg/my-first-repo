@@ -17,7 +17,7 @@ const TEXT_W = PAGE.width - MARGIN.left - MARGIN.right;
 const COL_GAP = Math.round(4.22 * MM);
 const COL_W = Math.floor((TEXT_W - COL_GAP) / 2);
 
-const runs = (rs, base = {}) => rs.map((r) => new TextRun({
+const runs = (rs, base = {}) => rs.map((r) => r.br ? new TextRun({ text: "", break: 1 }) : new TextRun({
   text: r.text, font: r.mono ? "Courier New" : FONT, size: base.size || 20,
   bold: !!(r.b || base.bold), italics: !!(r.i || base.italics),
   superScript: !!r.sup, subScript: !!r.sub, smallCaps: !!(r.sc || base.smallCaps),
@@ -124,9 +124,15 @@ for (const b of B) {
     case "p":
       body.push(new Paragraph({ alignment: AlignmentType.JUSTIFIED, spacing: { after: 0 }, indent: { firstLine: 200 }, children: runs(b.runs) }));
       break;
-    case "bullet":
-      body.push(new Paragraph({ alignment: AlignmentType.JUSTIFIED, numbering: { reference: "bullets", level: 0 }, spacing: { after: 0 }, children: runs(b.runs) }));
+    case "bullet": {
+      // 粗體標題自成一行(靠左,不被左右對齊拉開),說明另起一段、與標題文字切齊
+      const k = b.runs.findIndex((r) => r.br);
+      const head = k < 0 ? b.runs : b.runs.slice(0, k), rest = k < 0 ? [] : b.runs.slice(k + 1);
+      body.push(new Paragraph({ alignment: k < 0 ? AlignmentType.JUSTIFIED : AlignmentType.LEFT, numbering: { reference: "bullets", level: 0 },
+        spacing: { after: 0 }, keepNext: rest.length > 0, children: runs(head) }));
+      if (rest.length) body.push(new Paragraph({ alignment: AlignmentType.JUSTIFIED, spacing: { after: 0 }, indent: { left: 200 }, children: runs(rest) }));
       break;
+    }
     case "figure": figure(b); break;
     case "table": table(b); break;
     case "refs":
@@ -146,7 +152,7 @@ const doc = new Document({
   title: plain(B[0].runs),
   styles: { default: { document: { run: { font: FONT, size: 20 } } } },
   numbering: { config: [{ reference: "bullets", levels: [{ level: 0, format: LevelFormat.BULLET, text: "•", alignment: AlignmentType.LEFT,
-    style: { paragraph: { indent: { left: 300, hanging: 180 } } } }] }] },
+    style: { paragraph: { indent: { left: 200, hanging: 200 } } } }] }] },   // 項目符號切齊段落左緣
   sections: [
     { properties: { page }, children: front },
     { properties: { page, type: SectionType.CONTINUOUS, column: { count: 2, space: COL_GAP, equalWidth: true } }, children: body },

@@ -148,6 +148,9 @@ def inline(s, fmt=None):
                 elif name == r"\url":
                     inner, i = braced(s, i)
                     buf.append(inner)
+                elif name == r"\newline":
+                    flush()
+                    runs.append(dict(fmt, text="", br=True))
                 elif name in (r"\newblock",):
                     buf.append(" ")
                 else:
@@ -162,7 +165,9 @@ def inline(s, fmt=None):
     out = []
     for r in runs:
         r["text"] = re.sub(r"[ \t]+", " ", r["text"])
-        if r["text"]:
+        if out and out[-1].get("br"):
+            r["text"] = r["text"].lstrip()      # 換行後的第一個字不要留空白
+        if r["text"] or r.get("br"):
             out.append(r)
     return out
 
