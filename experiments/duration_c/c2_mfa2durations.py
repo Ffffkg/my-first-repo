@@ -66,6 +66,8 @@ def main():
     ap.add_argument("--min-lead-ms", type=float, default=-15, help="容許第一個音素稍早於 0 的誤差")
     ap.add_argument("--tail-tol-ms", type=float, default=25, help="margin 模式:實際音檔長度與推算長度的容許差")
     ap.add_argument("--out-dir", help="預設依 Matcha 慣例:<音檔>.parent.parent/durations")
+    ap.add_argument("--tg-dir", help="TextGrid 資料夾(預設主實驗 MFA 的 textgrids/<腔>;X4 用只以 1 h 訓練的 MFA)")
+    ap.add_argument("--list-dir", help="filelist 資料夾(預設 Matcha 的 data/hakka/<mode>/<腔>;_mfadur 清單與報告也寫在這裡)")
     ap.add_argument("--cleaners", default="hakka_cleaners")
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--dry-run", action="store_true", help="只檢查、不寫檔")
@@ -77,9 +79,9 @@ def main():
 
     pua, src = resolve_pua_map((args.cleaners,))
     print(f"PUA 對照表:{src}")
-    d_dir = C.filelist(args.mode, args.dialect, "x").parent
+    d_dir = Path(args.list_dir).expanduser() if args.list_dir else C.filelist(args.mode, args.dialect, "x").parent
     names = args.lists or sorted(p.stem for p in d_dir.glob("*.txt") if not p.stem.endswith("_mfadur"))
-    tg_idx = {p.stem: p for p in C.textgrid_dir(args.dialect).rglob("*.TextGrid")}
+    tg_idx = {p.stem: p for p in (Path(args.tg_dir).expanduser() if args.tg_dir else C.textgrid_dir(args.dialect)).rglob("*.TextGrid")}
     offsets = {}
     if args.offset_mode == "csv":
         for row in csv.reader(open(args.offset_csv, encoding="utf-8")):
