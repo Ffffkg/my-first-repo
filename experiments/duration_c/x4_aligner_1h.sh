@@ -55,8 +55,8 @@ if [ "${REPORT_ONLY:-0}" != 1 ]; then
     echo "===== $d:建立 X4 資料樹($(date '+%m-%d %H:%M'))"
     python "$HERE/x4_prepare.py" --dialect "$d" --out "$X" || { echo "★ $d 資料樹建立失敗"; continue; }
     act mfa
+    wait_mfa                                   # 前一次中斷時留下的 mfa 若還在跑,等它寫完模型
     if [ ! -f "$MODEL" ]; then
-      wait_mfa
       echo "===== $d:mfa train(只用 1 h 訓練子集)($(date '+%m-%d %H:%M'))"
       mfa train "$X/x4train_$d" "$LEX" "$MODEL" --clean -j "$JOBS" > "$X/mfa_train.log" 2>&1 \
           || { echo "★ mfa train 失敗,看 $X/mfa_train.log 最後幾行:"; tail -5 "$X/mfa_train.log"; continue; }
@@ -70,8 +70,9 @@ if [ "${REPORT_ONLY:-0}" != 1 ]; then
       fi
     done
     act tts
-    if [ ! -f "$X/lists/train_mfadur.txt" ]; then
-      # 時長轉換的裁切對位設定沿用主實驗(讀主實驗留下的 mfadur_report.json)
+    if ! grep -q offset_tg_dir "$X/lists/mfadur_report.json" 2>/dev/null; then   # 舊版(裁切點用 1 h MFA 推算)的清單要重做
+      # 時長轉換的裁切對位設定沿用主實驗(讀主實驗留下的 mfadur_report.json);
+      # 裁切點一律用主實驗的 TextGrid 推算(22 kHz 音檔當初就是依它裁切),時長才用 1 h MFA 的邊界
       OFF=$(python - "$M/data/hakka/joint/$d/mfadur_report.json" <<'PY'
 import json, sys
 a = json.load(open(sys.argv[1], encoding="utf-8"))["args"]
@@ -83,9 +84,19 @@ print(" ".join(out))
 PY
 ) || { echo "★ 讀不到主實驗的 mfadur_report.json,無法沿用裁切設定"; continue; }
       echo "  沿用主實驗的時長轉換設定:$OFF"
+      MAIN_TG=$(python -c "import sys; sys.path.insert(0, '$HERE'); from hakka_c import config as C; print(C.textgrid_dir('$d'))")
+      rm -f "$X/lists/"*_mfadur.txt
       python "$HERE/c2_mfa2durations.py" --dialect "$d" --tg-dir "$X/tg" --list-dir "$X/lists" --out-dir "$X/wav22k/durations" $OFF \
-          | tail -6
+          --offset-tg-dir "$MAIN_TG" | grep -E "句可用|留白|排除原因"
     fi
+    # 可用句數要接近主實驗(主實驗的清單本來就已經過同樣的過濾),太少代表轉換有問題,不要拿去訓練
+    python - "$X/lists/mfadur_report.json" <<'PY' || { echo "★ $d:X4 時長可用句數太少,停在這裡(看上面的排除原因)"; rm -f "$X/lists/"*_mfadur.txt; continue; }
+import json, sys
+r = json.load(open(sys.argv[1], encoding="utf-8"))["lists"]
+bad = {k: v for k, v in r.items() if v["kept"] < 0.9 * v["total"]}
+print("  可用句數:" + "、".join(f"{k} {v['kept']}/{v['total']}" for k, v in r.items()))
+sys.exit(1 if bad else 0)
+PY
     python "$HERE/x4_compare.py" --dialect "$d" --new-tg "$X/tg/train" | tee "$X/label_quality.md"
   done
 fi

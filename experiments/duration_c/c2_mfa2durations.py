@@ -67,6 +67,8 @@ def main():
     ap.add_argument("--tail-tol-ms", type=float, default=25, help="margin 模式:實際音檔長度與推算長度的容許差")
     ap.add_argument("--out-dir", help="預設依 Matcha 慣例:<音檔>.parent.parent/durations")
     ap.add_argument("--tg-dir", help="TextGrid 資料夾(預設主實驗 MFA 的 textgrids/<腔>;X4 用只以 1 h 訓練的 MFA)")
+    ap.add_argument("--offset-tg-dir", help="margin 模式:用這份 TextGrid 推算裁切起點(22 kHz 音檔當初是依主實驗 MFA 的邊界裁切的;"
+                    "X4 換用 1 h MFA 的邊界時,要指定主實驗的 textgrids/<腔>,否則裁切點會對不上)")
     ap.add_argument("--list-dir", help="filelist 資料夾(預設 Matcha 的 data/hakka/<mode>/<腔>;_mfadur 清單與報告也寫在這裡)")
     ap.add_argument("--cleaners", default="hakka_cleaners")
     ap.add_argument("--limit", type=int, default=0)
@@ -82,6 +84,7 @@ def main():
     d_dir = Path(args.list_dir).expanduser() if args.list_dir else C.filelist(args.mode, args.dialect, "x").parent
     names = args.lists or sorted(p.stem for p in d_dir.glob("*.txt") if not p.stem.endswith("_mfadur"))
     tg_idx = {p.stem: p for p in (Path(args.tg_dir).expanduser() if args.tg_dir else C.textgrid_dir(args.dialect)).rglob("*.TextGrid")}
+    off_idx = {p.stem: p for p in Path(args.offset_tg_dir).expanduser().rglob("*.TextGrid")} if args.offset_tg_dir else None
     offsets = {}
     if args.offset_mode == "csv":
         for row in csv.reader(open(args.offset_csv, encoding="utf-8")):
@@ -126,7 +129,14 @@ def main():
                         raise StructError("offset csv 沒有這句")
                     off = offsets[stem]
                 elif args.offset_mode == "margin":
-                    off = margin_offset(utt.phone_iv[0][0], utt.phone_iv[-1][1], orig_dur, n_samp / C.SR,
+                    ref, ref_dur = utt, orig_dur
+                    if off_idx is not None:                     # 裁切點依當初裁切所用的 TextGrid 推算
+                        if stem not in off_idx:
+                            raise StructError("找不到推算裁切點用的 TextGrid")
+                        rt = read_textgrid(off_idx[stem])
+                        ref = build_utt(stem, sym, rt)
+                        ref_dur = max(b for _, b, _ in find_tier(rt, "phones"))
+                    off = margin_offset(ref.phone_iv[0][0], ref.phone_iv[-1][1], ref_dur, n_samp / C.SR,
                                         args.margin_ms / 1000, args.tail_tol_ms / 1000)
                     if off is None:
                         raise StructError("音檔長度與裁切規則對不上")
