@@ -3,12 +3,16 @@
 路徑可以用環境變數覆寫,不必改程式:
     export HAKKA_ROOT=~/hakka_tts
     export MATCHA_ROOT=~/Matcha-TTS
+    export VITS_ROOT=~/vits
 """
 import os
 from pathlib import Path
 
 HAKKA = Path(os.environ.get("HAKKA_ROOT", "~/hakka_tts")).expanduser()
 MATCHA = Path(os.environ.get("MATCHA_ROOT", "~/Matcha-TTS")).expanduser()
+VITS = Path(os.environ.get("VITS_ROOT", "~/vits")).expanduser()      # 官方 VITS 程式(v_setup.sh 下載)
+VITS_RUNS = HAKKA / "vits"             # VITS 實驗的 checkpoint 與 log
+VITS_SEG_FRAMES = 8192 // 256          # VITS 訓練片段長度(frame)
 ANALYSIS = HAKKA / "analysis"          # 既有的自寫腳本(evaluate_v2.py 等)
 BENCH = HAKKA / "benchmark"
 VOCAB_JSON = BENCH / "hakka_matcha_vocab.json"

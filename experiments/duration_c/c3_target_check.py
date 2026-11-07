@@ -110,6 +110,7 @@ def main():
     ap.add_argument("--name", required=True)
     ap.add_argument("--cleaners", default="hakka_cleaners")
     ap.add_argument("--device", default="cuda")
+    ap.add_argument("--arch", default="matcha", choices=("matcha", "vits"))
     ap.add_argument("--n-boot", type=int, default=2000)
     args = ap.parse_args()
 
@@ -117,10 +118,14 @@ def main():
     from hakka_c.structure import StructError, build_utt
     from hakka_c.textgrid import read_textgrid
 
-    ckpt = Path(args.ckpt) if args.ckpt else find_ckpt(args.exp, args.which)
+    if args.arch == "vits":
+        from hakka_c.vits_io import VitsEngine, find_vits_ckpt
+        ckpt = Path(args.ckpt) if args.ckpt else find_vits_ckpt(args.exp, args.which)
+    else:
+        ckpt = Path(args.ckpt) if args.ckpt else find_ckpt(args.exp, args.which)
     rows_in = read_filelist(Path(args.filelist).expanduser())
     print(f"checkpoint {ckpt}\nfilelist {args.filelist}({len(rows_in)} 句)")
-    eng = Engine(ckpt, args.device, (args.cleaners,))
+    eng = VitsEngine(ckpt, args.device, (args.cleaners,)) if args.arch == "vits" else Engine(ckpt, args.device, (args.cleaners,))
     tg_idx = textgrid_index(args.dialect)
 
     rows, recs, skipped, t0 = [], [], Counter(), time.time()

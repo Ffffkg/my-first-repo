@@ -302,6 +302,9 @@ python e_analyze.py --key ~/hakka_tts/exp_e/hailu_base_vs_c2/key.csv  --response
 | `x4_aligner_1h.sh` | X4:MFA 也只用 1 h 目標腔資料訓練,用它的時長重訓 +AD / XAD(三種子),與主實驗並列;另出標籤品質比較。主實驗的 durations 不動(獨立 symlink 資料樹) | 是 |
 | `x4_prepare.py` | X4:建立獨立的音檔 symlink 樹、清單與 MFA corpus | 否 |
 | `x4_compare.py` | X4:1 h MFA 與主實驗 MFA 的音素時長、邊界差比較 | 否 |
+| `v0_vits_pilot.sh` | V0:VITS 試跑——官方 VITS(MAS)vs VITS +AD(MFA 時長),1 h 四縣、1 種子;先跑煙霧測試(30 步 + 推論一致性),再訓練、驗證集選取整、D1 評估,並與 Matcha 的 base / c2 並列 | 是 |
+| `v_train.py` | 客語 VITS 訓練(單 GPU;損失與超參數同官方;`--durations mfa` = +AD、`--init-from` = 跨腔初始化、`--dp-kernel/--dp-filter` = 放大 DP) | 是 |
+| `hakka_c/vits_model.py`、`hakka_c/vits_io.py` | 包裝官方 VITS(不改原始碼):Matcha 文字前端、MFA 時長路徑、確定性 DP;評估用的 VitsEngine(`c_eval.py` / `c3_target_check.py` / `d1_pipeline.sh` 加 `--arch vits`) | — |
 | `a1_run.sh` | A1 一鍵:找出 base / C2 / C6(三種子)與 48h 的評估資料夾,在 `asr` 環境辨識並出報告(`DIALECTS=sixian NSENT=10` 先小試) | 是 |
 | `c3_target_check.py` | C3 前置診斷:C2 母音核偏差拆成 訓練目標 / blank 靜音 / 預測器 / 取整 | 是(只跑編碼器) |
 | `c3_fit_pp.py` | C3a:在驗證集估停頓前母音核縮放 s_pp(c_eval / d1_pipeline 用 `--s-pp`) | 否 |

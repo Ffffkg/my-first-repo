@@ -76,6 +76,7 @@ def main():
     ap.add_argument("--selfcheck", action="store_true", help="先驗證自寫合成路徑與 model.synthesise() 一致")
     ap.add_argument("--n-boot", type=int, default=10000)
     ap.add_argument("--device", default="cuda")
+    ap.add_argument("--arch", default="matcha", choices=("matcha", "vits"), help="vits:checkpoint 在 ~/hakka_tts/vits/<exp>/G_<步數>.pth")
     ap.add_argument("--name", help="輸出資料夾名稱(預設 <cond>__<variant>)")
     args = ap.parse_args()
 
@@ -91,8 +92,15 @@ def main():
         label += "_custom"
     kw = {k: p[k] for k in keys}
 
-    ckpt = Path(args.ckpt) if args.ckpt else find_ckpt(args.exp, args.which)
-    cond = args.exp or ckpt.parent.parent.parent.parent.name
+    if args.arch == "vits":
+        from hakka_c.vits_io import VitsEngine, find_vits_ckpt
+        if args.ens_exps or args.data_yaml:
+            sys.exit("--arch vits 不支援 --ens-exps / --data-yaml")
+        ckpt = Path(args.ckpt) if args.ckpt else find_vits_ckpt(args.exp, args.which)
+        cond = args.exp or ckpt.parent.name
+    else:
+        ckpt = Path(args.ckpt) if args.ckpt else find_ckpt(args.exp, args.which)
+        cond = args.exp or ckpt.parent.parent.parent.parent.name
     name = args.name or f"{cond}__{label}"
     out = C.OUT_ROOT / "eval" / name
     out.mkdir(parents=True, exist_ok=True)
@@ -101,7 +109,8 @@ def main():
     print(f"checkpoint {ckpt}\n推論設定 {kw}\n輸出 {out}")
 
     mel_stats = load_mel_stats(args.data_yaml) if args.data_yaml else None
-    eng = Engine(ckpt, args.device, (args.cleaners,), mel_stats)
+    eng = VitsEngine(ckpt, args.device, (args.cleaners,)) if args.arch == "vits" else \
+        Engine(ckpt, args.device, (args.cleaners,), mel_stats)
     ens = []
     for e in [x for x in (args.ens_exps or "").split(",") if x]:
         ck = find_ckpt(e, args.which)
