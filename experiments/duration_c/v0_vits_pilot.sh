@@ -7,6 +7,8 @@
 #
 #   nohup bash v0_vits_pilot.sh > ~/hakka_tts/runs/v0.log 2>&1 &
 #   STEPS=100000(預設)  EVAL_STEPS="50000 100000"(預設,看是否已收斂)  DIALECTS=sixian(預設)
+#   VSEEDS="1234 123 2026"   VITS 的訓練種子(預設只有 1234);STEPS 加大時,已完成的模型會從 last.pth 接著訓練
+#   例:STEPS=200000 EVAL_STEPS=200000 VSEEDS="1234 123 2026" nohup bash v0_vits_pilot.sh >> ~/hakka_tts/runs/v0.log 2>&1 &
 #   REPORT_ONLY=1 bash v0_vits_pilot.sh      # 不訓練,只出報告
 # 用 GPU:第一步的煙霧測試會印出每步秒數與預估時間;1 h 資料 10 萬步約 10–15 小時(× 2 個系統)。
 set -uo pipefail
@@ -14,7 +16,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 H=${HAKKA_ROOT:-$HOME/hakka_tts}; M=${MATCHA_ROOT:-$HOME/Matcha-TTS}; VR=${VITS_ROOT:-$HOME/vits}
 E=$H/exp_c/eval; C3=$H/exp_c/c3; O=$H/exp_c/v0
 STEPS=${STEPS:-100000}; EVAL_STEPS=${EVAL_STEPS:-"50000 $STEPS"}; DIALECTS=${DIALECTS:-sixian}
-SEED=1234; SEEDS="1234 123 2026"
+VSEEDS=${VSEEDS:-1234}; SEEDS="1234 123 2026"
 mkdir -p "$O" "$H/runs"
 source ~/miniconda3/etc/profile.d/conda.sh
 act() { set +u; conda activate "$1"; set -u; }
@@ -63,7 +65,7 @@ exp_of() {
 # ---------------- 1. 訓練
 if [ "${REPORT_ONLY:-0}" != 1 ]; then
   for d in $DIALECTS; do
-    for k in vbase vad; do
+    for SEED in $VSEEDS; do for k in vbase vad; do
       exp=$(exp_of $k "$d" $SEED)
       [ -f "$H/vits/$exp/G_$STEPS.pth" ] && continue
       if [ $k = vbase ]; then
@@ -77,7 +79,7 @@ if [ "${REPORT_ONLY:-0}" != 1 ]; then
       grep -E "訓練句數|★" "$H/runs/$exp.log" | head -3
       grep -E "^step" "$H/runs/$exp.log" | tail -1
       [ -f "$H/vits/$exp/G_$STEPS.pth" ] || echo "★ 訓練失敗:$exp(看 $H/runs/$exp.log)"
-    done
+    done; done
   done
 fi
 
@@ -86,7 +88,7 @@ val_of() { list_of "$M/configs/data/fair1h_joint_$1_mfadur.yaml" valid_filelist_
 choose() {  # 系統 腔 種子 步數 → 評估資料夾名稱
   local k=$1 d=$2 s=$3 st=$4 exp name pick dir arch=() which
   exp=$(exp_of "$k" "$d" "$s")
-  case $k in vbase|vad) arch=(--arch vits); which=step$st; dir=${k}_${d}_step$st ;;
+  case $k in vbase|vad) arch=(--arch vits); which=step$st; dir=${k}_${d}$(sfx "$s")_step$st ;;
              *) which=step40000; dir=${k}_${d}$(sfx "$s")_step40000 ;; esac
   name=c6val_${k}_${d}$(sfx "$s")$([ ${#arch[@]} -gt 0 ] && echo "_step$st")
   if [ ! -f "$C3/$name/recs.pkl" ]; then
@@ -113,15 +115,19 @@ for d in $DIALECTS; do
   done
   for st in $EVAL_STEPS; do
     for k in vbase vad; do
-      exp=$(exp_of $k "$d" $SEED)
-      [ -f "$H/vits/$exp/G_$st.pth" ] || { echo "  ($exp 沒有第 $st 步,略過)"; continue; }
-      x=$(choose $k "$d" $SEED "$st") && sys_args+=(--sys "${k}_${st}=$E/$x")
+      out=""
+      for s in $VSEEDS; do
+        exp=$(exp_of $k "$d" "$s")
+        [ -f "$H/vits/$exp/G_$st.pth" ] || { echo "  ($exp 沒有第 $st 步,略過)"; continue; }
+        x=$(choose $k "$d" "$s" "$st") && out+="$E/$x,"
+      done
+      [ -n "$out" ] && sys_args+=(--sys "${k}_${st}=${out%,}")
     done
   done
   [ -f "$E/big48h_$d/syllables_wave.csv" ] && sys_args+=(--sys "48h=$E/big48h_$d")
   for b in vbase_$STEPS base; do
     printf '%s\n' "${sys_args[@]}" | grep -q "^$b=" || continue
-    echo "===== $d:時長命中率、ρ、MCD(與 $b 比較;VITS 為單一種子)"
+    echo "===== $d:時長命中率、ρ、MCD(與 $b 比較;VITS 種子:$VSEEDS)"
     python "$HERE/x1_overlap.py" --dialect "$d" --base "$b" "${sys_args[@]}" --out "$O/v0_${d}_vs_${b}.md" \
         | sed -n "/## 全部/,/## 排除/p" | grep -v "## 排除"
   done
