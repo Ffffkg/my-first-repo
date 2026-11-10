@@ -40,12 +40,12 @@ def read_list(path):
 class Data:
     """回傳 (文字 id、語者、波形、MFA 時長或 None)。時長檔與 Matcha 相同:blank 穿插後每個符號的 frame 數。"""
 
-    def __init__(self, rows, durations, dur_dir=None, cleaners="hakka_cleaners"):
+    def __init__(self, rows, durations, dur_dir=None, cleaners="hakka_cleaners", max_frames=0):
         import soundfile as sf
         sys.path.insert(0, str(C.MATCHA))
         from matcha.text import text_to_sequence
         from matcha.utils.utils import intersperse
-        self.items, bad = [], 0
+        self.items, bad, long_ = [], 0, 0
         for wav, spk, text in rows:
             seq, _ = text_to_sequence(text, [cleaners])
             x = intersperse(seq, 0)
@@ -53,6 +53,9 @@ class Data:
             T = n // C.HOP
             if T <= C.VITS_SEG_FRAMES:                 # 比訓練片段(8192 樣本 = 32 frame)還短的句子官方也無法取片段
                 bad += 1
+                continue
+            if max_frames and T > max_frames:          # 官方 DistributedBucketSampler 也丟掉超過最後一個邊界(1000 frame)的句子
+                long_ += 1
                 continue
             d = None
             if durations == "mfa":
@@ -70,6 +73,8 @@ class Data:
             self.items.append((np.asarray(x, np.int64), spk, str(wav), T * C.HOP, d))
         if bad:
             print(f"  ★ {bad} 句太短,或時長檔與文字 / 音檔長度對不上,已略過")
+        if long_:
+            print(f"  {long_} 句超過 {max_frames} 音框({max_frames * C.HOP / C.SR:.1f} 秒),依官方做法略過")
         if not self.items:
             sys.exit("★ 沒有可用的訓練句")
 
@@ -129,6 +134,7 @@ def main():
     ap.add_argument("--seed", type=int, default=1234)
     ap.add_argument("--fp16", type=int, default=1, help="官方設定為 fp16 混合精度")
     ap.add_argument("--workers", type=int, default=4)
+    ap.add_argument("--max-frames", type=int, default=0, help="略過超過這個音框數的句子(官方 VITS 為 1000;預設 0 = 不限,同 V0)")
     ap.add_argument("--pad-frames", type=int, default=1, help="batch 的音框數補到這個倍數(大資料集建議 32;預設 1 = 不補,同 V0)")
     ap.add_argument("--pad-text", type=int, default=1, help="batch 的文字長度補到這個倍數(大資料集建議 16)")
     ap.add_argument("--log-every", type=int, default=200)
@@ -149,7 +155,7 @@ def main():
     dev = torch.device(args.device)
     torch.backends.cudnn.benchmark = True
 
-    data = Data(read_list(args.train_list), args.durations, args.dur_dir)
+    data = Data(read_list(args.train_list), args.durations, args.dur_dir, max_frames=args.max_frames)
     print(f"訓練句數 {len(data)}({args.train_list});時長來源 {args.durations}")
     net_g, net_d = V.build(V.n_vocab(), N_SPEAKERS, args.dp, args.dp_kernel, args.dp_filter)
     net_g, net_d = net_g.to(dev), net_d.to(dev)

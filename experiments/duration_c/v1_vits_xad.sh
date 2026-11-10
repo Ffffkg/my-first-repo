@@ -45,6 +45,20 @@ exp_of() {
 }
 src_exp() { echo "vits_base_48h_$1_s1234"; }
 
+# 中途當掉(記憶體不足、驅動問題等)時自動重試,從最近一次存檔(last.pth)接著訓練;最多 3 次
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True     # 減少顯示記憶體碎片(不影響數值)
+train_retry() {  # 實驗名稱 完成時應存在的檔案 v_train.py 參數...
+  local exp=$1 done_file=$2; shift 2
+  : > "$H/runs/$exp.log"
+  for attempt in 1 2 3; do
+    python "$HERE/v_train.py" --exp "$exp" "$@" >> "$H/runs/$exp.log" 2>&1
+    [ -f "$done_file" ] && return 0
+    echo "  ★ $exp 第 $attempt 次中斷:$(grep -E 'Error' "$H/runs/$exp.log" | tail -1 | cut -c1-150)"
+    sleep 60
+  done
+  return 1
+}
+
 # ---------------- 1. 訓練
 if [ "${REPORT_ONLY:-0}" != 1 ]; then
   for d in $DIALECTS; do
@@ -52,10 +66,9 @@ if [ "${REPORT_ONLY:-0}" != 1 ]; then
     if [ ! -f "$init" ]; then
       tl=$(list_of "$M/configs/data/hakka_joint_${s}_ladder_48h.yaml" train_filelist_path)
       echo "===== 來源模型 $sx(清單 $(basename "$tl"),$(wc -l < "$tl") 句;$SRC_STEPS 步;$(date '+%m-%d %H:%M'))"
-      python "$HERE/v_train.py" --exp "$sx" --train-list "$tl" --seed 1234 --max-steps "$SRC_STEPS" --save-every 50000 \
-          --pad-frames 32 --pad-text 16 --workers 8 \
-          > "$H/runs/$sx.log" 2>&1
-      grep -E "訓練句數|★" "$H/runs/$sx.log" | head -3
+      train_retry "$sx" "$init" --train-list "$tl" --seed 1234 --max-steps "$SRC_STEPS" --save-every 25000 \
+          --max-frames 1000 --pad-frames 32 --pad-text 16 --workers 8
+      grep -E "訓練句數|略過|★" "$H/runs/$sx.log" | head -4
       grep -E "^step" "$H/runs/$sx.log" | tail -1
       [ -f "$init" ] || { echo "★ 來源模型訓練失敗(看 $H/runs/$sx.log)"; continue; }
     fi
@@ -69,8 +82,8 @@ if [ "${REPORT_ONLY:-0}" != 1 ]; then
           tl=$(list_of "$M/configs/data/fair1h_joint_$d.yaml" train_filelist_path); extra=""
         fi
         echo "===== 訓練 $exp(由 $sx 初始化;清單 $(basename "$tl");$(date '+%m-%d %H:%M'))"
-        python "$HERE/v_train.py" --exp "$exp" --train-list "$tl" $extra --init-from "$init" --seed "$seed" \
-            --max-steps "$STEPS" > "$H/runs/$exp.log" 2>&1
+        train_retry "$exp" "$H/vits/$exp/G_$STEPS.pth" --train-list "$tl" $extra --init-from "$init" --seed "$seed" \
+            --max-steps "$STEPS"
         grep -E "訓練句數|\[transfer\]|★" "$H/runs/$exp.log" | head -4
         grep -E "^step" "$H/runs/$exp.log" | tail -1
         [ -f "$H/vits/$exp/G_$STEPS.pth" ] || echo "★ 訓練失敗:$exp(看 $H/runs/$exp.log)"
