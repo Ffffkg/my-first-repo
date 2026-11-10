@@ -11,6 +11,7 @@
 同一個 --exp 再跑一次會從 last.pth 接著訓練。
 """
 import argparse
+import functools
 import json
 import random
 import sys
@@ -83,14 +84,18 @@ class Data:
         return x, spk, a.mean(1)[:L], d
 
 
-def collate(batch):
+def collate(batch, pad_frames=1, pad_text=1):
+    """pad_frames / pad_text > 1 時把 batch 長度補到倍數:48 h 資料每個 batch 的長度幾乎都不同,
+    cudnn.benchmark 會對每個新形狀重新測速,非常慢;補齊後形狀數量有限(補的部分都被 mask 掉,不影響損失)。"""
     import torch
     b = len(batch)
     xl = torch.tensor([len(x) for x, *_ in batch])
     yl = torch.tensor([len(y) for _, _, y, _ in batch])
-    X = torch.zeros(b, int(xl.max()), dtype=torch.long)
-    Y = torch.zeros(b, int(yl.max()))
-    D = torch.zeros(b, int(xl.max()), dtype=torch.long) if batch[0][3] is not None else None
+    up = lambda n, m: -(-int(n) // m) * m  # noqa: E731
+    nx, ny = up(xl.max(), pad_text), up(yl.max(), pad_frames * C.HOP)
+    X = torch.zeros(b, nx, dtype=torch.long)
+    Y = torch.zeros(b, ny)
+    D = torch.zeros(b, nx, dtype=torch.long) if batch[0][3] is not None else None
     for i, (x, _, y, d) in enumerate(batch):
         X[i, :len(x)] = torch.from_numpy(x)
         Y[i, :len(y)] = torch.from_numpy(y)
@@ -124,6 +129,8 @@ def main():
     ap.add_argument("--seed", type=int, default=1234)
     ap.add_argument("--fp16", type=int, default=1, help="官方設定為 fp16 混合精度")
     ap.add_argument("--workers", type=int, default=4)
+    ap.add_argument("--pad-frames", type=int, default=1, help="batch 的音框數補到這個倍數(大資料集建議 32;預設 1 = 不補,同 V0)")
+    ap.add_argument("--pad-text", type=int, default=1, help="batch 的文字長度補到這個倍數(大資料集建議 16)")
     ap.add_argument("--log-every", type=int, default=200)
     ap.add_argument("--device", default="cuda")
     args = ap.parse_args()
@@ -179,7 +186,7 @@ def main():
     net_g.train(); net_d.train()
     while step < args.max_steps:
         dl = torch.utils.data.DataLoader(data, batch_sampler=batches(data, args.batch_size, loader_rng),
-                                         collate_fn=collate, num_workers=args.workers, pin_memory=dev.type == "cuda")
+                                         collate_fn=functools.partial(collate, pad_frames=args.pad_frames, pad_text=args.pad_text), num_workers=args.workers, pin_memory=dev.type == "cuda")
         lr = H["learning_rate"] * H["lr_decay"] ** epoch      # 官方:每個 epoch 衰減一次
         for o in (opt_g, opt_d):
             for g in o.param_groups:

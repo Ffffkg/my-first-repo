@@ -53,6 +53,7 @@ if [ "${REPORT_ONLY:-0}" != 1 ]; then
       tl=$(list_of "$M/configs/data/hakka_joint_${s}_ladder_48h.yaml" train_filelist_path)
       echo "===== 來源模型 $sx(清單 $(basename "$tl"),$(wc -l < "$tl") 句;$SRC_STEPS 步;$(date '+%m-%d %H:%M'))"
       python "$HERE/v_train.py" --exp "$sx" --train-list "$tl" --seed 1234 --max-steps "$SRC_STEPS" --save-every 50000 \
+          --pad-frames 32 --pad-text 16 --workers 8 \
           > "$H/runs/$sx.log" 2>&1
       grep -E "訓練句數|★" "$H/runs/$sx.log" | head -3
       grep -E "^step" "$H/runs/$sx.log" | tail -1
