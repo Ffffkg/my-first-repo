@@ -16,7 +16,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 H=${HAKKA_ROOT:-$HOME/hakka_tts}; M=${MATCHA_ROOT:-$HOME/Matcha-TTS}; VR=${VITS_ROOT:-$HOME/vits}
 E=$H/exp_c/eval; C3=$H/exp_c/c3; O=$H/exp_c/v0
 STEPS=${STEPS:-100000}; EVAL_STEPS=${EVAL_STEPS:-"50000 $STEPS"}; DIALECTS=${DIALECTS:-sixian}
-VSEEDS=${VSEEDS:-1234}; SEEDS="1234 123 2026"
+VSEEDS=${VSEEDS:-1234}; SEEDS="1234 123 2026"; VKINDS=${VKINDS:-"vbase vad"}   # VKINDS="vbase" 只訓練 VITS base
 mkdir -p "$O" "$H/runs"
 source ~/miniconda3/etc/profile.d/conda.sh
 act() { set +u; conda activate "$1"; set -u; }
@@ -65,7 +65,7 @@ exp_of() {
 # ---------------- 1. 訓練
 if [ "${REPORT_ONLY:-0}" != 1 ]; then
   for d in $DIALECTS; do
-    for SEED in $VSEEDS; do for k in vbase vad; do
+    for SEED in $VSEEDS; do for k in $VKINDS; do
       exp=$(exp_of $k "$d" $SEED)
       [ -f "$H/vits/$exp/G_$STEPS.pth" ] && continue
       if [ $k = vbase ]; then
@@ -114,7 +114,7 @@ for d in $DIALECTS; do
     [ -n "$out" ] && sys_args+=(--sys "$k=${out%,}")
   done
   for st in $EVAL_STEPS; do
-    for k in vbase vad; do
+    for k in $VKINDS; do
       out=""
       for s in $VSEEDS; do
         exp=$(exp_of $k "$d" "$s")
