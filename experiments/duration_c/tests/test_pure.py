@@ -814,3 +814,33 @@ def test_x3_remeasure(tmp_path):
     c = read_cols(ev / "syllables_wave_x3.csv")
     assert list(c["syl_idx"]) == [0, 1] and list(c["entering"]) == [1, 0]
     assert abs(c["ref_ms"][0] - 80) < 1e-6 and abs(c["pred_ms"][0] - 90) < 1e-6 and c["n_gen"][0] == 2
+
+
+def test_s1_syllable_diag(tmp_path):
+    """兩個「種子」各一句:種子 A 的入聲母音被拉長但音節總長不變((b) 救得回);種子 B 整句等比例放慢((a) 救得回)。"""
+    import os
+    import re as _re
+    names = ["s", "ii@5", "d", "d", "o@24", "ng"]
+    real = tmp_path / "hakka" / "textgrids" / "sixian" / "XF"
+    real.mkdir(parents=True)
+    (real / "XF-1.TextGrid").write_text(LONG_TG, encoding="utf-8")            # siid5:音節 300 ms、ii 80 ms
+    slow = _re.sub(r"(xm(?:in|ax) = )([0-9.]+)", lambda m: f"{m.group(1)}{float(m.group(2)) * 1.5:.3f}", LONG_TG)
+    variants = {"A": LONG_TG.replace("xmax = 0.28", "xmax = 0.32").replace("xmin = 0.28", "xmin = 0.32"),   # ii 120 ms、音節 300 ms
+                "B": slow}                                                                                 # ii 120 ms、音節 450 ms
+    dirs = []
+    for k, tg in variants.items():
+        ev = tmp_path / f"ev{k}"
+        (ev / "bounds").mkdir(parents=True)
+        (ev / "mfa_tg" / "XF").mkdir(parents=True)
+        json.dump({"names": names}, open(ev / "bounds" / "XF-1.json", "w"))
+        (ev / "mfa_tg" / "XF" / "XF-1_g1234.TextGrid").write_text(tg, encoding="utf-8")
+        dirs.append(str(ev))
+    out = subprocess.run([sys.executable, str(ROOT / "s1_syllable_diag.py"), "--dialect", "sixian", "--eval-dirs", ",".join(dirs),
+                          "--n-boot", "50"], capture_output=True, text=True, env={**os.environ, "HAKKA_ROOT": str(tmp_path / "hakka")})
+    assert out.returncode == 0, out.stderr
+    t = out.stdout
+    assert "入聲 2、舒聲 2" in t
+    assert "| 目前 | 0.0 |" in t                          # 兩個入聲母音都差 40 ms
+    assert "| (a) 音節總長換成真人的 | 50.0 |" in t        # 只救回種子 B
+    assert "| (b) 母音比例換成真人的 | 50.0 |" in t        # 只救回種子 A
+    assert "| 50.0% | 50.0% | 0.0% | 0.0% |" in t
