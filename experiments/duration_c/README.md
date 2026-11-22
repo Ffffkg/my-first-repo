@@ -306,6 +306,7 @@ python e_analyze.py --key ~/hakka_tts/exp_e/hailu_base_vs_c2/key.csv  --response
 | `v1_vits_xad.sh` | V1:VITS 版 XAD——先訓練來源腔 48 h VITS,再做目標腔 1 h 的 X(vx)與 XAD(vxad),3 種子、20 萬步;與 Matcha 的 base / c2 / c6、V0 的 vbase / vad 並列 | 是 |
 | `s1_run.sh` | S1:在驗證集上合成 XAD*(1 小時 MFA,三種子),判斷入聲母音的錯誤來自「整個音節的長度」還是「音節內部的時間分配」,決定雙層(音節→音素)時長預測器值不值得做 | 是(只有合成) |
 | `s1_syllable_diag.py` | S1 分析:音節總長與母音長度的誤差、兩種反事實調整後的命中率、對數誤差分解 | 否 |
+| `s2_run.sh`、`s2_boundary_check.py` | S2:真人錄音上兩套 MFA(主實驗、1 小時)對各種音素邊界的一致性,特別是「母音 → 塞音韻尾」;順便重算 S1 報告 | 否 |
 | `v_train.py` | 客語 VITS 訓練(單 GPU;損失與超參數同官方;`--durations mfa` = +AD、`--init-from` = 跨腔初始化、`--dp-kernel/--dp-filter` = 放大 DP) | 是 |
 | `hakka_c/vits_model.py`、`hakka_c/vits_io.py` | 包裝官方 VITS(不改原始碼):Matcha 文字前端、MFA 時長路徑、確定性 DP;評估用的 VitsEngine(`c_eval.py` / `c3_target_check.py` / `d1_pipeline.sh` 加 `--arch vits`) | — |
 | `a1_run.sh` | A1 一鍵:找出 base / C2 / C6(三種子)與 48h 的評估資料夾,在 `asr` 環境辨識並出報告(`DIALECTS=sixian NSENT=10` 先小試) | 是 |

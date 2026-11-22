@@ -36,13 +36,17 @@ TOL = 30.0
 
 
 def spans(utt):
-    """{音節 idx: (音節起, 音節終, 母音起, 母音終)},單位秒。"""
+    """{音節 idx: (音節起, 音節終, 母音起, 母音終, 聲母長, 韻尾長, 音節)},時間單位秒。
+    聲母 = 母音核之前的音素、韻尾 = 母音核之後的音素(同一個音節內)。"""
     iv = dict(zip(utt.phone_sym, utt.phone_iv))
     out = {}
     for s in utt.syllables:
         a, b = iv[s.sym_idx[0]][0], iv[s.sym_idx[-1]][1]
         v0, v1 = iv[s.nuc]
-        out[s.idx] = (a, b, v0, v1, s)
+        k = s.sym_idx.index(s.nuc)
+        on = sum(iv[i][1] - iv[i][0] for i in s.sym_idx[:k])
+        co = sum(iv[i][1] - iv[i][0] for i in s.sym_idx[k + 1:])
+        out[s.idx] = (a, b, v0, v1, on, co, s)
     return out
 
 
@@ -65,10 +69,10 @@ def collect(ev, real_tg, why):
             why[str(e)[:40]] += 1
             continue
         real = real_cache[stem]
-        for idx, (a, b, v0, v1, s) in syn.items():
+        for idx, (a, b, v0, v1, on, co, s) in syn.items():
             if idx not in real:
                 continue
-            ra, rb, rv0, rv1, _ = real[idx]
+            ra, rb, rv0, rv1, ron, rco, _ = real[idx]
             S_syn, V_syn = (b - a) * 1000, (v1 - v0) * 1000
             S_ref, V_ref = (rb - ra) * 1000, (rv1 - rv0) * 1000
             if min(S_syn, V_syn, S_ref, V_ref) <= 0:
@@ -77,10 +81,12 @@ def collect(ev, real_tg, why):
             rows[(stem, idx)].append({
                 "S_syn": S_syn, "V_syn": V_syn, "S_ref": S_ref, "V_ref": V_ref,
                 "V_a": V_syn * S_ref / S_syn, "V_b": S_syn * V_ref / S_ref,
+                "O_syn": on * 1000, "C_syn": co * 1000, "O_ref": ron * 1000, "C_ref": rco * 1000,
                 "entering": s.entering, "coda": s.coda, "prepausal": s.prepausal})
     out = []
     for (stem, idx), rs in rows.items():
-        m = {k: float(np.mean([r[k] for r in rs])) for k in ("S_syn", "V_syn", "S_ref", "V_ref", "V_a", "V_b")}
+        m = {k: float(np.mean([r[k] for r in rs]))
+             for k in ("S_syn", "V_syn", "S_ref", "V_ref", "V_a", "V_b", "O_syn", "C_syn", "O_ref", "C_ref")}
         out.append({"stem": stem, "idx": idx, **m, "entering": rs[0]["entering"], "coda": rs[0]["coda"],
                     "prepausal": rs[0]["prepausal"], "n_gen": len(rs)})
     return out
@@ -109,11 +115,14 @@ def main():
 
     g = lambda k: np.array([r[k] for r in data], float)  # noqa: E731
     S_syn, V_syn, S_ref, V_ref, V_a, V_b = (g(k) for k in ("S_syn", "V_syn", "S_ref", "V_ref", "V_a", "V_b"))
+    O_syn, C_syn, O_ref, C_ref = (g(k) for k in ("O_syn", "C_syn", "O_ref", "C_ref"))
     et = np.array([r["entering"] for r in data], bool)
     stems = np.array([r["stem"] for r in data])
     hit = lambda v: (np.abs(v - V_ref) <= TOL).astype(float)  # noqa: E731
     h0, ha, hb = hit(V_syn), hit(V_a), hit(V_b)
-    cols = {"h0": h0, "ha": ha, "hb": hb, "da": ha - h0, "db": hb - h0,
+    cols = {"h0": h0, "ha": ha, "hb": hb, "da": ha - h0, "db": hb - h0, "dba": hb - ha,
+            "osh_s": O_syn / S_syn, "osh_r": O_ref / S_ref, "csh_s": C_syn / S_syn, "csh_r": C_ref / S_ref,
+            "evsh": np.abs(V_syn / S_syn - V_ref / S_ref),
             "eS": np.abs(S_syn - S_ref), "eV": np.abs(V_syn - V_ref), "bS": S_syn - S_ref, "bV": V_syn - V_ref,
             "shs": V_syn / S_syn, "shr": V_ref / S_ref}
     t = UttTable(stems, cols, {"et": et, "non": ~et})
@@ -132,6 +141,11 @@ def main():
          f"| 母音平均偏差 (ms) | {fmt(mean_ci(t, 'bV', 'et', idx))} | {fmt(mean_ci(t, 'bV', 'non', idx))} |",
          f"| 母音占音節比例:合成 / 真人 | {t.mean('shs', 'et'):.3f} / {t.mean('shr', 'et'):.3f} | "
          f"{t.mean('shs', 'non'):.3f} / {t.mean('shr', 'non'):.3f} |",
+         f"| 聲母占音節比例:合成 / 真人 | {t.mean('osh_s', 'et'):.3f} / {t.mean('osh_r', 'et'):.3f} | "
+         f"{t.mean('osh_s', 'non'):.3f} / {t.mean('osh_r', 'non'):.3f} |",
+         f"| 韻尾占音節比例:合成 / 真人 | {t.mean('csh_s', 'et'):.3f} / {t.mean('csh_r', 'et'):.3f} | "
+         f"{t.mean('csh_s', 'non'):.3f} / {t.mean('csh_r', 'non'):.3f} |",
+         f"| 母音比例平均絕對誤差(合成 vs 真人) | {t.mean('evsh', 'et'):.3f} | {t.mean('evsh', 'non'):.3f} |",
          f"| 音節誤差與母音誤差的相關 r | {pearson((S_syn - S_ref)[et], (V_syn - V_ref)[et]):.3f} | "
          f"{pearson((S_syn - S_ref)[~et], (V_syn - V_ref)[~et]):.3f} |", "",
          "## 2. 反事實調整後的母音 ±30 ms 命中率(百分比;差值括號為 95% 信賴區間)\n",
@@ -140,7 +154,8 @@ def main():
          f"| (a) 音節總長換成真人的 | {100 * t.mean('ha', 'et'):.1f} | {100 * t.mean('ha', 'non'):.1f} |",
          f"| (b) 母音比例換成真人的 | {100 * t.mean('hb', 'et'):.1f} | {100 * t.mean('hb', 'non'):.1f} |",
          f"| (a) − 目前 | {fmt(pct(mean_ci(t, 'da', 'et', idx)))} | {fmt(pct(mean_ci(t, 'da', 'non', idx)))} |",
-         f"| (b) − 目前 | {fmt(pct(mean_ci(t, 'db', 'et', idx)))} | {fmt(pct(mean_ci(t, 'db', 'non', idx)))} |", ""]
+         f"| (b) − 目前 | {fmt(pct(mean_ci(t, 'db', 'et', idx)))} | {fmt(pct(mean_ci(t, 'db', 'non', idx)))} |",
+         f"| (b) − (a)(配對) | {fmt(pct(mean_ci(t, 'dba', 'et', idx)))} | {fmt(pct(mean_ci(t, 'dba', 'non', idx)))} |", ""]
 
     # 原本沒命中的入聲母音,被哪一種調整救回
     miss = et & (h0 == 0)
@@ -178,8 +193,14 @@ def main():
                  "雙層時長預測器有改善空間(實際模型只能拿到這個上限的一部分)。")
     else:
         L.append(f"- 入聲:把音節總長換成真人的,命中率只 {100 * da[0]:+.1f} 點 → 音節總長不是主要瓶頸,雙層預測器的改善空間有限。")
-    L.append(f"- 對照:把母音比例換成真人的,命中率 {100 * db[0]:+.1f} 點。"
-             + ("比 (a) 大 → 瓶頸較偏向音節內部的時間分配。" if db[0] > da[0] else "比 (a) 小 → 瓶頸較偏向整個音節的長度。"))
+    dba = mean_ci(t, "dba", "et", idx)
+    if dba[1] > 0:
+        verdict = "(b) 顯著大於 (a) → 入聲母音的錯誤較偏向「母音占音節的比例」(聲母、母音、韻尾之間的分配)。"
+    elif dba[2] < 0:
+        verdict = "(b) 顯著小於 (a) → 入聲母音的錯誤較偏向「整個音節的長度」。"
+    else:
+        verdict = "(b) 與 (a) 的差異不顯著 → 兩種來源的影響相近。"
+    L.append(f"- 對照:把母音比例換成真人的,命中率 {100 * db[0]:+.1f} 點;(b) − (a) = {fmt(pct(dba))}。" + verdict)
     L.append("\n注意:(a)、(b) 都用到真人時長,只是上限診斷;MFA 是用真人錄音訓練的,量合成語音時可能較不準。")
     text = "\n".join(L)
     if args.out:

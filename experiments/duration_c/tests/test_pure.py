@@ -844,3 +844,22 @@ def test_s1_syllable_diag(tmp_path):
     assert "| (a) 音節總長換成真人的 | 50.0 |" in t        # 只救回種子 B
     assert "| (b) 母音比例換成真人的 | 50.0 |" in t        # 只救回種子 A
     assert "| 50.0% | 50.0% | 0.0% | 0.0% |" in t
+
+
+def test_s2_boundary_check(tmp_path):
+    """B 的入聲母音終點晚 20 ms(母音 → 塞音韻尾),其他邊界相同。"""
+    a, b = tmp_path / "A" / "XF", tmp_path / "B" / "XF"
+    a.mkdir(parents=True)
+    b.mkdir(parents=True)
+    shifted = LONG_TG.replace("xmax = 0.28", "xmax = 0.30").replace("xmin = 0.28", "xmin = 0.30")
+    for i in range(25):
+        (a / f"XF-{i}.TextGrid").write_text(LONG_TG, encoding="utf-8")
+        (b / f"XF-{i}.TextGrid").write_text(shifted, encoding="utf-8")
+    out = subprocess.run([sys.executable, str(ROOT / "s2_boundary_check.py"), "--dialect", "sixian",
+                          "--a-tg", str(tmp_path / "A"), "--b-tg", str(tmp_path / "B")], capture_output=True, text=True)
+    assert out.returncode == 0, out.stderr
+    t = out.stdout
+    assert "比對 25 句" in t
+    assert "| 入聲:母音 → 塞音韻尾 | 25 | 20.0 | 20.0 | 0.0% | 100.0% | 0.0% |" in t
+    assert "| 入聲:聲母 → 母音 | 25 | 0.0 |" in t and "| 舒聲:母音 → 鼻音韻尾 | 25 | 0.0 |" in t
+    assert "| 入聲:母音長度 | 25 | 20.000 ms | nan |" in t        # 每句都一樣 → 相關係數無法計算
