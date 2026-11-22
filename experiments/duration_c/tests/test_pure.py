@@ -863,3 +863,37 @@ def test_s2_boundary_check(tmp_path):
     assert "| 入聲:母音 → 塞音韻尾 | 25 | 20.0 | 20.0 | 0.0% | 100.0% | 0.0% |" in t
     assert "| 入聲:聲母 → 母音 | 25 | 0.0 |" in t and "| 舒聲:母音 → 鼻音韻尾 | 25 | 0.0 |" in t
     assert "| 入聲:母音長度 | 25 | 20.000 ms | nan |" in t        # 每句都一樣 → 相關係數無法計算
+
+
+def test_s3_syllable_rule(tmp_path):
+    """規則切分:入聲後的子音歸前一音節;單一鼻音依 nasal_rule;TextGrid 比對。"""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("hs", ROOT.parent / "matcha_patch/matcha/models/components/hakka_syllables.py")
+    hs = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(hs)
+    names = [None, "s", "ii@5", "d", "o@24", "ng", "sp", "n", "a@24", "a@11", "h", "a@2", "b"]
+    ix = {n: i for i, n in enumerate(names) if n}
+
+    def seg(toks, rule="onset"):
+        ids = []
+        for t in toks:
+            ids += [0, ix[t]]
+        syl, pp = hs.segment(ids + [0], names, rule)
+        return [syl[2 * i + 1] for i in range(len(toks))], pp
+    assert seg(["s", "ii@5", "d", "d", "o@24", "ng", "sp", "n", "a@24", "n", "a@11"]) == ([0, 0, 0, 1, 1, 1, -1, 2, 2, 3, 3], [False, True, False, True])
+    assert seg(["n", "a@24", "n", "a@11"], "coda")[0] == [0, 0, 0, 1]
+    assert seg(["h", "a@2", "b", "a@11"])[0] == [0, 0, 0, 1]                    # 入聲後的子音 = 韻尾
+    # 與 TextGrid 比對(LONG_TG:siid5、dong24)
+    sym = tmp_path / "symbols.py"
+    sym.write_text("HAKKA_SYMBOLS = " + repr(names[1:]) + "\n", encoding="utf-8")
+    text = "".join(chr(0xE000 + ix[t] - 1) for t in ["s", "ii@5", "d", "d", "o@24", "ng"])
+    lst = tmp_path / "l.txt"
+    lst.write_text(f"/x/XF/XF-1.wav|0|{text}\n", encoding="utf-8")
+    tg = tmp_path / "hakka" / "textgrids" / "sixian" / "XF"
+    tg.mkdir(parents=True)
+    (tg / "XF-1.TextGrid").write_text(LONG_TG, encoding="utf-8")
+    out = subprocess.run([sys.executable, str(ROOT / "s3_syllable_check.py"), "--dialect", "sixian", "--lists", str(lst),
+                          "--symbols", str(sym)], capture_output=True, text=True,
+                         env={**__import__("os").environ, "HAKKA_ROOT": str(tmp_path / "hakka")})
+    assert out.returncode == 0, out.stderr
+    assert "100.00%(2/2)" in out.stdout and out.stdout.strip().endswith("onset")
