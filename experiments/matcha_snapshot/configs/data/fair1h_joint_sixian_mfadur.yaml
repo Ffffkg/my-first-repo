@@ -1,0 +1,23 @@
+_target_: matcha.data.text_mel_datamodule.TextMelDataModule
+name: fair1h_joint_sixian_mfadur
+train_filelist_path: /home/ken-fang/Matcha-TTS/data/hakka/joint/sixian/ladder_1h_mfadur.txt
+valid_filelist_path: /home/ken-fang/Matcha-TTS/data/hakka/joint/sixian/val_clean_from_hailu_mfadur.txt
+batch_size: 16
+num_workers: 8
+pin_memory: true
+cleaners:
+- hakka_cleaners
+add_blank: true
+n_spks: 4
+n_fft: 1024
+n_feats: 80
+sample_rate: 22050
+hop_length: 256
+win_length: 1024
+f_min: 0
+f_max: 8000
+data_statistics:
+  mel_mean: -6.01718
+  mel_std: 2.493491
+seed: ${seed}
+load_durations: true
