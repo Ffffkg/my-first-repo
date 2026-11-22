@@ -343,6 +343,7 @@ class TextEncoder(nn.Module):
         dur_tone_dim=32,
         syl_dur=None,
         syl_nasal_rule="onset",
+        syl_table=None,
     ):
         super().__init__()
         self.encoder_type = encoder_type
@@ -446,7 +447,7 @@ class TextEncoder(nn.Module):
                 duration_predictor_params.filter_channels_dp,
                 duration_predictor_params.kernel_size,
                 duration_predictor_params.p_dropout,
-                syl_dur, [None] + list(HAKKA_SYMBOLS), nasal_rule=syl_nasal_rule,
+                syl_dur, [None] + list(HAKKA_SYMBOLS), nasal_rule=syl_nasal_rule, table=syl_table,
             )
 
     def forward(self, x, x_lengths, spks=None):

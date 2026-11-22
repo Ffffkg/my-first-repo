@@ -68,6 +68,7 @@ class MatchaTTS(BaseLightningClass):  # 🍵
             dur_tone_dim=encoder.get("dur_tone_dim", 32),
             syl_dur=encoder.get("syl_dur", None),
             syl_nasal_rule=encoder.get("syl_nasal_rule", "onset"),
+            syl_table=encoder.get("syl_table", None),
         )
         # 音節→音素雙層時長預測的額外損失權重(syl_dur 為 None 時不使用)
         self.syl_loss_w = float(encoder.get("syl_loss_w", 0.5))

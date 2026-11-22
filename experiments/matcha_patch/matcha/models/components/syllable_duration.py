@@ -12,18 +12,27 @@
 import torch
 from torch import nn
 
-from matcha.models.components.hakka_syllables import segment
+import json
+import os
+
+from matcha.models.components.hakka_syllables import segment, segment_from_groups, table_key
 from matcha.models.components.text_encoder import DurationPredictor, LayerNorm
 
 
 class SyllableDurationPredictor(nn.Module):
     def __init__(self, in_channels, filter_channels, kernel_size, p_dropout, mode, symbol_names,
-                 nasal_rule="onset", feat_dim=16, pp_dim=8):
+                 nasal_rule="onset", table=None, feat_dim=16, pp_dim=8):
         super().__init__()
         assert mode in ("feat", "factor"), mode
         self.mode = mode
         self.names = list(symbol_names)            # names[id];不存進 state_dict
         self.nasal_rule = nasal_rule
+        # 音節分組表(文字 → 每個符號的音節編號;由文字前端/拼音提供,不含任何時間資訊);查不到才用規則
+        self.table = {}
+        if table:
+            with open(os.path.expanduser(table), encoding="utf-8") as f:
+                self.table = json.load(f)
+        self.n_lookup = [0, 0]                     # [查表, 退回規則]
         self.pp_emb = nn.Embedding(2, pp_dim)
         self.syl_conv1 = nn.Conv1d(in_channels + pp_dim, filter_channels, 3, padding=1)
         self.syl_norm1 = LayerNorm(filter_channels)
@@ -39,7 +48,16 @@ class SyllableDurationPredictor(nn.Module):
         B, L = x_ids.shape
         ids = x_ids.detach().cpu().tolist()
         lens = x_lengths.detach().cpu().tolist()
-        segs = [segment(ids[b][: int(lens[b])], self.names, self.nasal_rule) for b in range(B)]
+        segs = []
+        for b in range(B):
+            seq = ids[b][: int(lens[b])]
+            g = self.table.get(table_key(seq)) if self.table else None
+            if g is not None:
+                segs.append(segment_from_groups(seq, g))
+                self.n_lookup[0] += 1
+            else:
+                segs.append(segment(seq, self.names, self.nasal_rule))
+                self.n_lookup[1] += 1
         S = max(1, max(len(pp) for _, pp in segs))
         M = torch.zeros(B, S, L, device=device)
         pp = torch.zeros(B, S, dtype=torch.long, device=device)

@@ -897,3 +897,14 @@ def test_s3_syllable_rule(tmp_path):
                          env={**__import__("os").environ, "HAKKA_ROOT": str(tmp_path / "hakka")})
     assert out.returncode == 0, out.stderr
     assert "100.00%(2/2)" in out.stdout and out.stdout.strip().endswith("onset")
+    # 分組表與 segment_from_groups
+    tbl = tmp_path / "t.json"
+    out = subprocess.run([sys.executable, str(ROOT / "s3_syllable_check.py"), "--dialect", "sixian", "--lists", str(lst),
+                          "--symbols", str(sym), "--write-table", str(tbl)], capture_output=True, text=True,
+                         env={**__import__("os").environ, "HAKKA_ROOT": str(tmp_path / "hakka")})
+    assert out.returncode == 0, out.stderr
+    assert json.load(open(tbl, encoding="utf-8")) == {text: [0, 0, 0, 1, 1, 1]}
+    ids = [0, ix["n"], 0, ix["a@24"], 0, ix["n"], 0, ix["a@11"], 0, ix["sp"], 0, ix["h"], 0, ix["a@2"], 0]
+    syl, pp = hs.segment_from_groups(ids, [0, 0, 0, 1, -1, 2, 2])          # 鼻音當韻尾(由文字前端決定)
+    assert syl == [-1, 0, 0, 0, 0, 0, -1, 1, -1, -1, -1, 2, 2, 2, -1] and pp == [False, True, True]
+    assert hs.table_key([0, ix["n"], 0, ix["a@24"], 0]) == chr(0xE000 + ix["n"] - 1) + chr(0xE000 + ix["a@24"] - 1)

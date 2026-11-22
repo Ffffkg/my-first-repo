@@ -75,3 +75,31 @@ def segment(ids, names, nasal_rule="onset"):
         if ids[p] == 0 and 0 < p < L - 1 and syl[p - 1] >= 0 and syl[p - 1] == syl[p + 1]:
             syl[p] = syl[p - 1]
     return syl, prepausal
+
+
+def segment_from_groups(ids, groups):
+    """音節分組由文字前端提供(拼音本來就知道音節邊界)時使用。
+    ids:含 blank 的 id 序列;groups:每個非 blank 符號的音節編號(0 起連續,停頓 = -1)。
+    回傳格式與 segment() 相同。"""
+    L = len(ids)
+    nb = [p for p, i in enumerate(ids) if i != 0]
+    if len(nb) != len(groups):
+        raise ValueError(f"符號數 {len(nb)} 與分組長度 {len(groups)} 不符")
+    syl = [-1] * L
+    for p, g in zip(nb, groups):
+        syl[p] = g
+    for p in range(L):
+        if ids[p] == 0 and 0 < p < L - 1 and syl[p - 1] >= 0 and syl[p - 1] == syl[p + 1]:
+            syl[p] = syl[p - 1]
+    n = max(groups) + 1 if any(g >= 0 for g in groups) else 0
+    last = {}
+    for j, g in enumerate(groups):
+        if g >= 0:
+            last[g] = j
+    prepausal = [last[k] + 1 >= len(groups) or groups[last[k] + 1] < 0 for k in range(n)]
+    return syl, prepausal
+
+
+def table_key(ids, pua_start=0xE000):
+    """非 blank 的符號 id → 與 filelist 文字相同的私用區字串(查表用)。"""
+    return "".join(chr(pua_start + i - 1) for i in ids if i != 0)

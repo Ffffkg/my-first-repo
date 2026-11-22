@@ -56,4 +56,14 @@ aux["logp"] = (torch.log((d / D_tok.clamp(min=1e-8)).clamp(min=1e-8)) * aux["in_
 s, k = syllable_losses(aux, attn, "factor")
 print("perfect:", round(s.item(), 6), round(k.item(), 6))
 assert s.item() < 1e-5 and abs(k.item()) < 1e-5
+# 查表:文字前端提供的分組優先於規則(把 "n a@24 n a@11" 的第二個 n 當成韻尾)
+import json, tempfile
+from matcha.models.components.hakka_syllables import table_key
+seq_ids = seq(["n", "a@24", "n", "a@11"])
+tf = tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8")
+json.dump({table_key(seq_ids): [0, 0, 0, 1]}, tf); tf.close()
+te = TextEncoder("RoPE Encoder", enc_p, dp_p, len(names), n_spks=4, spk_emb_dim=64, syl_dur="factor", syl_table=tf.name)
+xx = torch.tensor([seq_ids]); te(xx, torch.tensor([len(seq_ids)]), torch.randn(1, 64))
+assert te.proj_w.last_aux["M"][0].sum(-1).tolist()[:2] == [5.0, 1.0] and te.proj_w.n_lookup == [1, 0]
+print("查表 ok")
 print("全部檢查通過")

@@ -65,10 +65,11 @@ def main():
     ap.add_argument("--symbols", help="預設 ~/Matcha-TTS/matcha/text/symbols.py")
     ap.add_argument("--out")
     ap.add_argument("--min-acc", type=float, default=0.97, help="最佳規則的音節正確率低於此值時結束代碼為 2")
+    ap.add_argument("--write-table", help="把 TextGrid 的音節分組寫成 JSON(文字 → 每個符號的音節編號),給模型查表")
     args = ap.parse_args()
     rule = load_rule()
     syms = load_symbols(args.symbols or C.MATCHA / "matcha" / "text" / "symbols.py")
-    table = [None] + list(syms)
+    sym_table = [None] + list(syms)
     lists = [Path(p) for p in args.lists] if args.lists else sorted((C.MATCHA / "data" / "hakka" / "joint" / args.dialect).glob("*.txt"))
     tgs = {p.stem: p for p in C.textgrid_dir(args.dialect).rglob("*.TextGrid")}
     seen, why = {}, Counter()
@@ -78,6 +79,7 @@ def main():
             if len(parts) >= 3:
                 seen.setdefault(Path(parts[0]).stem, parts[2])
     res = {r: Counter() for r in ("onset", "coda")}
+    table = {}
     amb = Counter()
     for stem, text in sorted(seen.items()):
         if stem not in tgs:
@@ -85,7 +87,7 @@ def main():
             continue
         try:
             ids = [ord(c) - PUA_START + 1 for c in text]
-            names = [table[i] for i in ids]
+            names = [sym_table[i] for i in ids]
         except (IndexError, TypeError):
             why["文字含非客語符號"] += 1
             continue
@@ -93,8 +95,13 @@ def main():
         if ref is None:
             why["TextGrid 與符號對不上"] += 1
             continue
+        grp_of = [-1] * len(names)
+        for k, g in enumerate(sorted(ref, key=min)):
+            for p in g:
+                grp_of[p] = k
+        table[text] = grp_of
         for r in res:
-            syl, _ = rule.segment(ids, table, r)
+            syl, _ = rule.segment(ids, [None] + list(syms), r)
             grp = {}
             for p, s in enumerate(syl):
                 if s >= 0:
@@ -123,7 +130,12 @@ def main():
     tot = sum(amb.values())
     L.append(f"\n有歧義的位置(舒聲音節後面單一鼻音){tot} 個:實際為韻尾 {amb['韻尾']}、聲母 {amb['聲母']}")
     best = max(res, key=lambda r: res[r]["正確"])
-    L.append(f"\n建議:nasal_rule = {best}")
+    L.append(f"\n建議:nasal_rule = {best}(只在查不到分組表時才會用到)")
+    if args.write_table:
+        import json
+        Path(args.write_table).expanduser().parent.mkdir(parents=True, exist_ok=True)
+        json.dump(table, open(Path(args.write_table).expanduser(), "w", encoding="utf-8"), ensure_ascii=False)
+        L.append(f"\n音節分組表:{len(table)} 句(占全部 {len(seen)} 句的 {100 * len(table) / max(len(seen), 1):.1f}%)→ {args.write_table}")
     text = "\n".join(L)
     if args.out:
         Path(args.out).expanduser().write_text(text, encoding="utf-8")

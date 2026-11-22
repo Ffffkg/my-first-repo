@@ -54,10 +54,12 @@ python "$PATCH/check_syllable_duration.py" "$M" > "$O/check_model.log" 2>&1 || {
 echo "===== 模型檢查通過($(tail -1 "$O/check_model.log"))"
 declare -A NASAL
 for d in $DIALECTS; do
-  NASAL[$d]=$(python "$HERE/s3_syllable_check.py" --dialect "$d" --out "$O/s3_$d.md" | tail -1); st=$?
-  echo "===== $d:音節切分規則 vs TextGrid(鼻音規則選 ${NASAL[$d]})"
-  grep -E "^\| (onset|coda)|有歧義" "$O/s3_$d.md"
-  [ $st = 0 ] && [[ ${NASAL[$d]} =~ ^(onset|coda)$ ]] || { echo "★ 音節切分規則的正確率低於 97% 或檢查失敗:$d,先停下來"; exit 1; }
+  # 音節邊界由文字(拼音)決定:用 TextGrid words 層的分組(不用時間)建查表;規則只在查不到時備用
+  NASAL[$d]=$(python "$HERE/s3_syllable_check.py" --dialect "$d" --out "$O/s3_$d.md" --min-acc 0 \
+      --write-table "$O/syl_table_$d.json" | tail -1)
+  echo "===== $d:音節分組表"
+  grep -E "^\| (onset|coda)|音節分組表" "$O/s3_$d.md"
+  [ -s "$O/syl_table_$d.json" ] || { echo "★ 音節分組表建立失敗:$d"; exit 1; }
 done
 
 # ---------------- 1. 訓練
@@ -65,7 +67,7 @@ train() {
   local v=$1 d=$2 s=$3 exp X=$X4/$2 steps=${4:-}
   exp=$(exp_of "s4$v" "$d" "$s"); [ -n "$steps" ] && exp=s4_smoke_${v}_$d
   [ -z "$steps" ] && has_step40k "$exp" && return 0
-  local ovr="$DP_OVR ++model.encoder.syl_dur=$v ++model.encoder.syl_nasal_rule=${NASAL[$d]}"
+  local ovr="$DP_OVR ++model.encoder.syl_dur=$v ++model.encoder.syl_nasal_rule=${NASAL[$d]} ++model.encoder.syl_table=$O/syl_table_$d.json"
   ovr+=" ++model.encoder.syl_loss_w=$SYL_LOSS_W ++model.encoder.share_loss_w=$SHARE_LOSS_W"
   local data="data.train_filelist_path=$X/lists/train_mfadur.txt data.valid_filelist_path=$X/lists/val_mfadur.txt"
   [ -n "$steps" ] && ovr+=" trainer.max_steps=$steps trainer.val_check_interval=100"

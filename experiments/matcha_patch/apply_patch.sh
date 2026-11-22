@@ -18,6 +18,9 @@ if [ "${1:-}" = "--revert" ]; then
 fi
 for f in $FILES; do
   if cmp -s "$M/$f" "$HERE/$f"; then echo "已經是修改版:$f"; continue; fi
+  if [ -f "$M/$f.presyl" ] && cmp -s "$M/$f.presyl" "$SNAP/$f"; then
+    cp "$HERE/$f" "$M/$f"; echo "更新為最新修改版:$f(原檔備份仍是 $f.presyl)"; continue
+  fi
   cmp -s "$M/$f" "$SNAP/$f" || { echo "★ $M/$f 與 snapshot 不同(之後又改過?),為了安全先停下來"; exit 1; }
   cp "$M/$f" "$M/$f.presyl"
   cp "$HERE/$f" "$M/$f"
