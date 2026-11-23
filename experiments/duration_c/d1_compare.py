@@ -37,6 +37,22 @@ def overlap(a0, a1, b0, b1):
     return max(0.0, min(a1, b1) - max(a0, b0))
 
 
+def no_attn_summary(ev, args, n_wav, tgs, rows, why):
+    """沒有逐音素時長的模型(Raon-OpenTTS):只有波形版指標。"""
+    c = read_cols(ev / "d1_rows.csv")
+    sw, txt = summarize(read_cols(ev / "syllables_wave.csv"), n_boot=args.n_boot)
+    L = [f"# D1 波形量測:{ev.name}(模型沒有逐音素時長,只有波形版)\n",
+         f"合成音檔 {n_wav} 個、MFA TextGrid {len(tgs)} 個、對上 {len(set(zip(c['stem'], c['gen_seed'])))} 個"
+         f"({len(rows)} 個音節 × 種子)。失敗原因:{dict(why) or '無'}\n",
+         "## 3. 入聲時長指標(波形;生成種子平均)\n", "| 指標 | 波形 |", "|---|---|",
+         f"| ET-VBias (ms) | {fmt(sw['et_vbias'])} |", f"| NonET-VBias (ms) | {fmt(sw['nonet_vbias'])} |",
+         f"| ΔBias (ms) | {fmt(sw['delta_bias'])} |", f"| ρ | {sw['rho']:.3f} |",
+         f"| rET-VBias | {sw['ret_vbias_pct']:+.1f}% |"]
+    text = "\n".join(L)
+    (ev / "d1_summary.md").write_text(text, encoding="utf-8")
+    print(text)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--eval-dir", required=True)
@@ -66,9 +82,11 @@ def main():
             why[str(e)[:50]] += 1
             continue
         wave_iv = {i: iv for i, iv in zip(syn.phone_sym, syn.phone_iv)}
-        frames = np.array(b["frames"], float)
-        st, en = np.array(b["start_s"]), np.array(b["end_s"])
-        attn = {rule: merge_blank(frames, rule) * C.HOP_MS for rule in RULES}
+        has_attn = b.get("frames") is not None          # Raon-OpenTTS 等沒有逐音素時長的模型:frames 為 null
+        if has_attn:
+            frames = np.array(b["frames"], float)
+            st, en = np.array(b["start_s"]), np.array(b["end_s"])
+            attn = {rule: merge_blank(frames, rule) * C.HOP_MS for rule in RULES}
         real = {s["idx"]: s for s in b["syllables"]}
         rec = {"dialect": args.dialect, "stem": stem, "spk": SPK_ID.get(stem.split("-")[0], -1), "names": b["names"]}
         for s in syn.syllables:
@@ -76,15 +94,16 @@ def main():
                 continue
             r = real[s.idx]
             w0, w1 = wave_iv[s.nuc]
-            j = 2 * s.nuc + 1                       # 母音核在 intersperse 序列中的位置
-            frac = {}
-            for key, k in (("pb", j - 1), ("pv", j), ("pa", j + 1)):
-                L = en[k] - st[k]
-                frac[key] = overlap(st[k], en[k], w0, w1) / L if L > 0 else np.nan
-            row = {**base_row(rec, r), "gen_seed": int(seed), "wave_ms": round(s.ref_ms, 3),
-                   **{f"attn_{rule}_ms": round(float(attn[rule][s.nuc]), 3) for rule in RULES},
-                   "blank_before_ms": round((en[j - 1] - st[j - 1]) * 1000, 2),
-                   "blank_after_ms": round((en[j + 1] - st[j + 1]) * 1000, 2), **frac}
+            row = {**base_row(rec, r), "gen_seed": int(seed), "wave_ms": round(s.ref_ms, 3)}
+            if has_attn:
+                j = 2 * s.nuc + 1                       # 母音核在 intersperse 序列中的位置
+                frac = {}
+                for key, k in (("pb", j - 1), ("pv", j), ("pa", j + 1)):
+                    L = en[k] - st[k]
+                    frac[key] = overlap(st[k], en[k], w0, w1) / L if L > 0 else np.nan
+                row.update({**{f"attn_{rule}_ms": round(float(attn[rule][s.nuc]), 3) for rule in RULES},
+                            "blank_before_ms": round((en[j - 1] - st[j - 1]) * 1000, 2),
+                            "blank_after_ms": round((en[j + 1] - st[j + 1]) * 1000, 2), **frac})
             rows.append(row)
     if not rows:
         sys.exit(f"★ 沒有任何句子對得上:{dict(why)}")
@@ -99,8 +118,12 @@ def main():
         base = {k: rs[0][k] for k in ("dialect", "stem", "spk", "gender", "syl_idx", "word", "tone", "entering",
                                       "coda", "prepausal", "ref_ms", "nuc_phone")}
         wave_rows.append({**base, "pred_ms": round(float(np.mean([r["wave_ms"] for r in rs])), 3), "n_gen": len(rs)})
-        attn_rows.append({**base, "pred_ms": rs[0]["attn_half_ms"]})
+        if "attn_half_ms" in rs[0]:
+            attn_rows.append({**base, "pred_ms": rs[0]["attn_half_ms"]})
     write_rows(ev / "syllables_wave.csv", wave_rows)
+    if not attn_rows:
+        no_attn_summary(ev, args, n_wav, tgs, rows, why)
+        return
     write_rows(ev / "syllables_attn_d1.csv", attn_rows)
 
     c = read_cols(ev / "d1_rows.csv")

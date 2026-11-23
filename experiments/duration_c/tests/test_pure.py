@@ -908,3 +908,82 @@ def test_s3_syllable_rule(tmp_path):
     syl, pp = hs.segment_from_groups(ids, [0, 0, 0, 1, -1, 2, 2])          # 鼻音當韻尾(由文字前端決定)
     assert syl == [-1, 0, 0, 0, 0, 0, -1, 1, -1, -1, -1, 2, 2, 2, -1] and pp == [False, True, True]
     assert hs.table_key([0, ix["n"], 0, ix["a@24"], 0]) == chr(0xE000 + ix["n"] - 1) + chr(0xE000 + ix["a@24"] - 1)
+
+
+def test_raon_pure(tmp_path):
+    """Raon-OpenTTS 的純函式:文字、語速擬合、提示句、詞表擴充、分批、學習率、權重鍵名。"""
+    from hakka_c import raon_io as R
+    assert R.words_text(["siid5", " ", "dong24 "]) == "siid5 dong24"
+    assert R.mel_frames(16000) == 1 + (16000 - 1024) // 256 and R.mel_frames(10) == 1
+    rows = [{"spk": 0, "sec": 0.5 + 0.1 * n, "text": "x" * n, "stem": f"a{n}"} for n in (10, 20, 40)]
+    rows += [{"spk": 1, "sec": 2.0, "text": "y" * 8, "stem": "b"}]
+    rate = R.fit_rate(rows)
+    assert abs(rate[0][0] - 0.5) < 1e-9 and abs(rate[0][1] - 0.1) < 1e-9
+    assert rate[1] == (0.0, 0.25)                                 # 只有一句:純比例
+    assert abs(R.rate_seconds(rate, 0, "x" * 30) - 3.5) < 1e-9
+    pr = R.pick_prompt([{"stem": "c", "spk": 0, "sec": 4.4}, {"stem": "a", "spk": 0, "sec": 5.0},
+                        {"stem": "b", "spk": 0, "sec": 4.0}, {"stem": "d", "spk": 1, "sec": 9.0}])
+    assert pr[0]["stem"] == "c" and 1 not in pr                   # 最接近 4.5 秒;超過 6 秒不選
+    pr = R.pick_prompt([{"stem": "x", "spk": 0, "sec": 4.0}, {"stem": "w", "spk": 0, "sec": 5.0}])
+    assert pr[0]["stem"] == "w"                                   # 同分取檔名小者
+    old = {" ": 0, "a": 1, "b": 2}
+    m, new = R.extend_vocab(old, ["ab5", "b ŋ"])
+    assert new == ["5", "ŋ"] and m["5"] == 3 and m["ŋ"] == 4 and m["a"] == 1
+    R.write_vocab(m, tmp_path / "v.txt")
+    assert R.read_vocab(tmp_path / "v.txt") == m
+    with pytest.raises(ValueError):
+        R.extend_vocab({"a": 0, "b": 0}, ["c"])
+    lens = [100, 300, 120, 50, 290, 80, 400]
+    bs = R.frame_batches(lens, 600, seed=1)
+    assert sorted(i for b in bs for i in b) == list(range(len(lens)))   # 每句恰好一次
+    assert all(max(lens[i] for i in b) * len(b) <= 600 or len(b) == 1 for b in bs)
+    assert bs == R.frame_batches(lens, 600, seed=1)
+    assert R.lr_at(500, 2e-5, 1000, 20000) == 1e-5 and R.lr_at(1000, 2e-5, 1000, 20000) == 2e-5
+    assert R.lr_at(20000, 2e-5, 1000, 20000) == 0.0
+    sd = {"ema_model_state_dict": {"initted": 1, "step": 2, "ema_model.transformer.w": 3, "ema_model.mel_spec.fb": 4}}
+    assert R.clean_state(sd) == {"transformer.w": 3}
+    assert R.clean_state({"transformer.w": 5}) == {"transformer.w": 5}
+
+
+def test_d1_compare_without_attn(tmp_path):
+    """沒有逐音素時長的模型(bounds 的 frames 為 null):只輸出波形版,不寫 attn 檔。"""
+    from dataclasses import asdict
+    names = ["s", "ii@5", "d", "d", "o@24", "ng"]
+    ev = tmp_path / "ev"
+    (ev / "bounds").mkdir(parents=True)
+    (ev / "wav").mkdir()
+    (ev / "mfa_tg" / "XF").mkdir(parents=True)
+    real = tmp_path / "XF-1.TextGrid"
+    real.write_text(LONG_TG, encoding="utf-8")
+    syl = [asdict(s) for s in build_utt("XF-1", names, read_textgrid(real)).syllables]
+    for stem in ("XF-1", "XF-2"):
+        json.dump({"stem": stem, "names": names, "frames": None, "syllables": syl},
+                  open(ev / "bounds" / f"{stem}.json", "w"))
+        for g in (1234, 2345):
+            (ev / "wav" / f"{stem}_g{g}.wav").write_bytes(b"")
+            (ev / "mfa_tg" / "XF" / f"{stem}_g{g}.TextGrid").write_text(LONG_TG, encoding="utf-8")
+    out = subprocess.run([sys.executable, str(ROOT / "d1_compare.py"), "--eval-dir", str(ev), "--dialect", "sixian",
+                          "--n-boot", "20"], capture_output=True, text=True)
+    assert out.returncode == 0, out.stderr
+    assert "只有波形版" in out.stdout
+    assert (ev / "syllables_wave.csv").exists() and not (ev / "syllables_attn_d1.csv").exists()
+    c = read_cols(ev / "syllables_wave.csv")
+    assert len(c["stem"]) == 4 and set(c["n_gen"]) == {2}
+    assert np.allclose(c["pred_ms"], c["ref_ms"])                 # 合成與真人用同一個 TextGrid → 完全相同
+
+
+def test_r_pick(tmp_path):
+    """驗證集選步數:全部母音命中率最高者;同分取較早。"""
+    def mk(d, errs, et):
+        write_rows(d / "syllables_wave.csv", [{"stem": "a", "entering": int(e), "ref_ms": 100.0, "pred_ms": 100.0 + x}
+                                              for x, e in zip(errs, et)])
+    dirs = []
+    for st, errs in ((2500, [50, 0, 0, 0]), (5000, [0, 0, 0, 50]), (10000, [50, 50, 0, 0])):
+        d = tmp_path / str(st)
+        d.mkdir()
+        mk(d, errs, [1, 0, 0, 0])
+        dirs.append(f"{st}={d}")
+    out = subprocess.run([sys.executable, str(ROOT / "r_pick.py"), "--dirs", *dirs], capture_output=True, text=True)
+    assert out.returncode == 0, out.stderr
+    assert out.stdout.strip().splitlines()[-1] == "2500"
+    assert "| 5000 | 75.0% | 100.0% | 4 |" in out.stdout
