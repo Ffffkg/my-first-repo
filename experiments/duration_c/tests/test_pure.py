@@ -987,3 +987,20 @@ def test_r_pick(tmp_path):
     assert out.returncode == 0, out.stderr
     assert out.stdout.strip().splitlines()[-1] == "2500"
     assert "| 5000 | 75.0% | 100.0% | 4 |" in out.stdout
+
+
+def test_raon_check_alignment():
+    """官方詞表比權重多幾個字元:只用 ASCII 且 ASCII 都在最前面時可接受,否則報錯。"""
+    from hakka_c import raon_io as R
+    toks = [" ", "1", "a", "b", "é", "ü", "가", "🎵"]
+    m = {t: i for i, t in enumerate(toks)}
+    assert "一致" in R.check_alignment(m, len(toks) + 1, "ab")
+    msg = R.check_alignment(m, len(toks) - 1, "a1 b")
+    assert "多 2 個字元" in msg and "編號 0–3" in msg and "最大編號 3" in msg
+    with pytest.raises(RuntimeError):
+        R.check_alignment(m, len(toks) - 1, "aé")                 # 用到非 ASCII
+    with pytest.raises(RuntimeError):
+        R.check_alignment(m, len(toks) + 2, "a")                  # 權重比詞表大
+    bad = {t: i for i, t in enumerate([" ", "a", "é", "z"])}       # ASCII 不全在前面(也不是排序好的)
+    with pytest.raises(RuntimeError):
+        R.check_alignment(bad, 3, "a")

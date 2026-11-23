@@ -80,7 +80,9 @@ def main():
         say(f"從第 {step} 步接著訓練")
     else:
         ck, _ = R.find_pretrained()
-        R.load_pretrained(model, ck, n_old, log=say)
+        used = {ch for sp in ("train", "val", "test") for r in R.load_jsonl(R.data_dir(args.dialect) / f"{sp}.jsonl")
+                for ch in r["text"]}
+        R.load_pretrained(model, ck, n_old, log=say, used_chars=used)
     if ema is None:
         ema = {k: v.detach().clone().float() for k, v in model.state_dict().items() if v.dtype.is_floating_point}
     save_steps = {int(s) for s in args.save_steps.split(",") if s} | {args.max_steps}

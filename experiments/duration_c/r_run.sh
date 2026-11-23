@@ -45,6 +45,9 @@ if [ "${REPORT_ONLY:-0}" != 1 ] && [ ! -f "$O/smoke_ok" ]; then
   [ "$n" -ge 1 ] || { echo "★ 煙霧測試合成失敗,看 $O/smoke_synth.log"; tail -5 "$O/smoke_synth.log"; exit 1; }
   echo "  合成 $n 個音檔 ✓"
   rm -rf "$RAON/runs/raon_smoke" "$E/raon_smoke"
+  python "$HERE/r_sanity_en.py" > "$O/sanity_en.log" 2>&1 && \
+      echo "  字元編號檢查:請聽 $O/sanity_en_correct.wav(應是清楚英文)與 sanity_en_shift1.wav(應聽不懂)" \
+      || { echo "★ 字元編號檢查失敗,看 $O/sanity_en.log"; exit 1; }
   touch "$O/smoke_ok"
 fi
 

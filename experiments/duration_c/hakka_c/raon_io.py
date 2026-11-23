@@ -213,8 +213,31 @@ def build_model(vocab_map, device="cuda", checkpoint_activations=False):
     return model.to(device)
 
 
-def load_pretrained(model, ckpt, n_old, log=print):
-    """載入官方權重;文字嵌入表只複製前 n_old + 1 列,新字元的列用舊列的平均與標準差隨機初始化。"""
+def check_alignment(vocab_map, n_rows, used_chars):
+    """官方釋出的 vocab.txt(5559 字元)比權重的文字嵌入表(5555 字元 + 1 列填充)多 4 個字元,不知道是哪 4 個。
+    詞表依編碼排序,ASCII 字元全部排在最前面(編號 0 起連續);多出來的字元只要不是 ASCII,就只會讓
+    ASCII 之後的編號錯位。所以只要客語拼音用到的字元全是 ASCII,編號就和權重訓練時一致。
+    回傳說明文字;對不上又無法確認時報錯。"""
+    n_tok = n_rows - 1
+    if n_tok == len(vocab_map):
+        return "詞表與權重一致"
+    toks = sorted(vocab_map, key=vocab_map.get)
+    k = 0
+    while k < len(toks) and len(toks[k]) == 1 and ord(toks[k]) < 128:
+        k += 1
+    used = sorted(set(used_chars))
+    later_ascii = [t for t in toks[k:] if len(t) == 1 and ord(t) < 128]
+    non_ascii = [c for c in used if ord(c) >= 128]
+    if n_tok > len(vocab_map) or later_ascii or non_ascii or toks != sorted(toks):
+        raise RuntimeError(f"vocab.txt 有 {len(vocab_map)} 個字元,權重的文字嵌入表對應 {n_tok} 個,且無法確認編號一致"
+                           f"(用到的非 ASCII 字元 {non_ascii[:10]};排在後面的 ASCII {later_ascii[:10]})")
+    return (f"vocab.txt 比權重多 {len(vocab_map) - n_tok} 個字元;詞表依編碼排序、ASCII 在最前面(編號 0–{k - 1}),"
+            f"客語拼音只用到 ASCII 字元(最大編號 {max(vocab_map[c] for c in used)}),編號與權重一致")
+
+
+def load_pretrained(model, ckpt, n_old, log=print, used_chars=None):
+    """載入官方權重;文字嵌入表複製權重有的列,其餘的列用舊列的平均與標準差隨機初始化。
+    n_old:官方 vocab.txt 的字元數;used_chars:實際會用到的字元(用來確認編號一致)。"""
     import torch
     if str(ckpt).endswith(".safetensors"):
         from safetensors.torch import load_file
@@ -224,7 +247,9 @@ def load_pretrained(model, ckpt, n_old, log=print):
     sd = clean_state(sd)
     old = sd[TEXT_EMB]
     if old.shape[0] != n_old + 1:
-        raise RuntimeError(f"vocab.txt 有 {n_old} 個字元,但 checkpoint 的文字嵌入表有 {old.shape[0]} 列(應為 {n_old + 1})")
+        if used_chars is None:
+            raise RuntimeError(f"vocab.txt 有 {n_old} 個字元,但 checkpoint 的文字嵌入表有 {old.shape[0]} 列(應為 {n_old + 1})")
+        log(check_alignment(model.vocab_char_map, old.shape[0], used_chars))
     cur = model.state_dict()[TEXT_EMB]
     new = cur.clone().float()
     new[: old.shape[0]] = old.float()
@@ -237,7 +262,7 @@ def load_pretrained(model, ckpt, n_old, log=print):
     bad = [k for k in res.missing_keys + res.unexpected_keys if not k.endswith("inv_freq")]   # 旋轉位置編碼是固定值
     if bad:
         raise RuntimeError(f"官方權重與模型不符:missing={res.missing_keys[:5]} unexpected={res.unexpected_keys[:5]}")
-    log(f"載入官方權重 {ckpt}(新增字元 {cur.shape[0] - old.shape[0]} 個)")
+    log(f"載入官方權重 {ckpt}(嵌入表 {old.shape[0]} 列沿用,{cur.shape[0] - old.shape[0]} 列新初始化)")
     return model
 
 

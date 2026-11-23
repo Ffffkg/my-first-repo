@@ -64,7 +64,8 @@ from hakka_c import raon_io as R
 ck, vocab = R.find_pretrained()
 m = R.read_vocab(vocab)
 model = R.build_model(m, "cpu")
-R.load_pretrained(model, ck, len(m))
+import string
+R.load_pretrained(model, ck, len(m), used_chars=string.ascii_lowercase + string.digits + " ")
 print(f"  checkpoint {ck.name}、詞表 {len(m)} 字元、參數 {sum(p.numel() for p in model.parameters()) / 1e6:.0f}M ✓")
 voc = R.load_vocoder("cpu")
 print("  聲碼器 ✓")
