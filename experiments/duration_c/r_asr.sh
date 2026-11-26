@@ -22,7 +22,7 @@ for d in sixian hailu; do
   args=()
   for k in $SYSTEMS; do x=$(sys_dirs "$k" "$d"); [ -n "$x" ] && args+=(--sys "$k=$x"); done
   act asr
-  echo "##### $d:${#args[@]} 個系統"
+  echo "##### $d:$(( ${#args[@]} / 2 )) 個系統"
   python "$HERE/a1_asr_check.py" run --dialect "$d" --out-dir "$O/$d" --batch "${BATCH:-8}" "${args[@]}" \
       | grep -E "句;系統|待辨識|→" || { echo "★ $d 辨識失敗"; exit 1; }
 done
