@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>客語語音聽測</title>
+<style>
+:root{--blue:#1f5fbf;--blue-soft:#e8f0fc;--line:#c9d3e0;--ok:#2e7d32;--err:#c62828}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{font-family:system-ui,-apple-system,"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif;font-size:20px;line-height:1.6;
+  max-width:640px;margin:0 auto;padding:16px;background:#f6f7f9;color:#1d1d1f}
+h1{font-size:26px;margin:8px 0 4px}h2{font-size:22px;margin:0 0 8px}
+.card{background:#fff;border:1px solid #dde2ea;border-radius:14px;padding:18px;margin:14px 0}
+.big{width:100%;display:block;font-size:22px;padding:16px;margin:10px 0;border-radius:12px;border:2px solid var(--blue);
+  background:#fff;color:var(--blue);font-weight:600;touch-action:manipulation;cursor:pointer}
+.big.primary{background:var(--blue);color:#fff}.big:disabled{opacity:.45}
+.play{font-size:22px}.play.done{border-color:var(--ok);color:var(--ok)}.play.playing{background:#fff4e5;border-color:#ef6c00;color:#ef6c00}
+.opt{width:100%;display:block;text-align:left;font-size:20px;padding:12px 16px;margin:6px 0;border-radius:10px;border:2px solid var(--line);
+  background:#fff;color:#1d1d1f;touch-action:manipulation;cursor:pointer}
+.opt.sel{border-color:var(--blue);background:var(--blue-soft);font-weight:700}.opt.mid{text-align:center}
+.opt:disabled{opacity:.4}
+.chips{display:flex;flex-wrap:wrap;gap:10px;margin:8px 0}
+.chip{font-size:20px;padding:10px 18px;border-radius:999px;border:2px solid var(--line);background:#fff;color:#1d1d1f;touch-action:manipulation;cursor:pointer}
+.chip.sel{border-color:var(--blue);background:var(--blue-soft);font-weight:700}
+input[type=text]{font-size:20px;padding:10px 12px;width:100%;border:2px solid var(--line);border-radius:10px}
+.err{color:var(--err);font-weight:700;min-height:1.2em}.ok{color:var(--ok);font-weight:700}
+.muted{color:#5f6368;font-size:17px}.q{font-weight:700;margin:18px 0 4px}
+.bar{height:10px;background:#e3e7ee;border-radius:99px;overflow:hidden}.bar>div{height:100%;background:var(--blue);width:0}
+textarea{width:100%;height:8em;font-size:13px}
+</style>
+</head>
+<body>
+<h1>客語語音聽測<span id="label"></span></h1>
+<div class="card err" id="nojs">如果畫面按了沒有反應:請按右上角「⋯」,選「用瀏覽器開啟」(Chrome 或 Safari)。</div>
+
+<div class="card" id="resume" style="display:none">
+  <h2>歡迎回來</h2><p id="resume_text"></p>
+  <button class="big primary" id="btn_resume" type="button">繼續作答</button>
+  <button class="big" id="btn_restart" type="button">從頭開始</button>
+</div>
+
+<div id="intro">
+  <div class="card">
+    <p>每一題有兩段<b>同一句客語</b>,都是電腦合成的聲音(第 1 段、第 2 段)。請兩段都聽完,再選哪一段比較自然。</p>
+    <p>一共 <b id="n_trials"></b> 題,大約 <b id="n_min"></b> 分鐘。可以戴耳機,或在安靜的地方用手機喇叭聽。</p>
+    <p class="muted">您的作答只用在學術研究,不會公開您的名字。中途離開也沒關係,再點一次連結就能接著做。</p>
+  </div>
+  <div class="card">
+    <h2>1. 先試聽音量</h2>
+    <button class="big play" id="btn_vol" type="button">▶ 試聽</button>
+    <p class="muted">請調到聽得清楚、舒服的音量。</p>
+  </div>
+  <div class="card">
+    <h2>2. 您的稱呼</h2>
+    <input type="text" id="name" placeholder="例如:陳先生、阿梅">
+    <h2 style="margin-top:18px">3. 您會說哪些客語腔調?(可以選很多個)</h2>
+    <div class="chips" id="dia">
+      <button class="chip" type="button" data-v="四縣">四縣</button>
+      <button class="chip" type="button" data-v="海陸">海陸</button>
+      <button class="chip" type="button" data-v="其他">其他</button>
+    </div>
+    <input type="text" id="dia_other" placeholder="其他腔調,例如大埔、饒平" style="display:none">
+    <h2 style="margin-top:18px">4. 平常多久說一次客語?</h2>
+    <div class="chips" id="freq">
+      <button class="chip" type="button" data-v="每天">每天</button>
+      <button class="chip" type="button" data-v="每週">每週</button>
+      <button class="chip" type="button" data-v="偶爾">偶爾</button>
+      <button class="chip" type="button" data-v="很少">很少</button>
+    </div>
+    <div class="err" id="msg_intro"></div>
+    <button class="big primary" id="btn_start" type="button">開始聽測</button>
+  </div>
+</div>
+
+<div id="test" style="display:none">
+  <div class="card">
+    <div id="prog"></div><div class="bar"><div id="bar"></div></div>
+  </div>
+  <div class="card">
+    <button class="big play" id="btn_p1" type="button"></button>
+    <button class="big play" id="btn_p2" type="button"></button>
+    <p class="muted" id="hint_play">請先把兩段都聽過,再回答下面的問題。</p>
+    <div class="q">(一)整體來說,哪一段聽起來比較自然?</div>
+    <div id="q1"></div>
+    <div class="q">(二)像「食、日、學」這種短促收尾的字(入聲字),哪一段唸得比較自然、長短比較對?</div>
+    <div id="q2"></div>
+    <div class="err" id="msg_trial"></div>
+    <button class="big primary" id="btn_next" type="button">下一題</button>
+  </div>
+</div>
+
+<div class="card" id="done" style="display:none">
+  <h2>全部完成,非常感謝您!</h2>
+  <div id="done_online">
+    <p class="ok" id="sent_ok">您的作答已經自動送出,可以直接關掉這個畫面。</p>
+    <div id="sent_retry" style="display:none">
+      <p class="err">網路好像不太穩,還有部分作答沒送出。</p>
+      <button class="big primary" id="btn_resend" type="button">再送一次</button>
+    </div>
+  </div>
+  <div id="done_offline">
+    <p>請把結果傳給研究者,下面三種方式選一種就好:</p>
+    <button class="big primary" id="btn_share" type="button">用 LINE / Email 傳送結果</button>
+    <button class="big" id="btn_download" type="button">下載結果檔</button>
+    <button class="big" id="btn_copy" type="button">複製結果文字</button>
+    <div class="err" id="msg_done"></div>
+    <p class="muted">都不行的話,請長按下面的文字全選、複製,貼到 LINE 傳給研究者。</p>
+    <textarea id="csv" readonly></textarea>
+  </div>
+</div>
+
+<script>
+var TRIALS = __TRIALS__, TEST = '__TESTID__', SUBMIT = '__SUBMIT__', LABEL = '__LABEL__';
+var KEY = 'hakka_ab_' + TEST;
+var CHOICES = [[-3, '第 1 段 好很多'], [-2, '第 1 段 比較好'], [-1, '第 1 段 稍微好一點'], [0, '差不多 / 分不出來'],
+               [1, '第 2 段 稍微好一點'], [2, '第 2 段 比較好'], [3, '第 2 段 好很多']];
+var st = {sid: '', name: '', dia: [], other: '', freq: '', i: 0, ans: [], pending: [], finished: false};
+var cur = {q1: null, q2: null, p1: false, p2: false, t0: 0}, audio = null, playingBtn = null;
+
+function $(id) { return document.getElementById(id); }
+function say(id, t) { $(id).textContent = t; }
+function show(id, on) { $(id).style.display = on ? '' : 'none'; }
+function clean(s) { return String(s || '').replace(/[,"\r\n]/g, ' ').replace(/^[=+\-@]+/, '').trim(); }
+function save() { try { localStorage.setItem(KEY, JSON.stringify(st)); } catch (e) {} }
+function load() { try { return JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { return null; } }
+function newId() { var s = 'L'; for (var k = 0; k < 6; k++) s += 'abcdefghjkmnpqrstuvwxyz23456789'.charAt(Math.floor(Math.random() * 31)); return s; }
+function dialectStr() {
+  var out = [];
+  for (var k = 0; k < st.dia.length; k++) out.push(st.dia[k] === '其他' ? '其他:' + (clean(st.other) || '未填') : st.dia[k]);
+  return out.join('+');
+}
+
+// ---------- 音檔播放(大按鈕;一次只播一段)
+function stopAudio() {
+  if (audio) { audio.pause(); audio = null; }
+  if (playingBtn) { playingBtn.classList.remove('playing'); playingBtn.textContent = playingBtn.getAttribute('data-idle'); playingBtn = null; }
+}
+function play(btn, src, onEnd) {
+  var same = playingBtn === btn;
+  stopAudio();
+  if (same) return;
+  audio = new Audio(src); playingBtn = btn;
+  btn.classList.add('playing'); btn.textContent = '■ 播放中…(按一下停止)';
+  audio.addEventListener('ended', function () { stopAudio(); if (onEnd) onEnd(); });
+  audio.addEventListener('error', function () { stopAudio(); say('msg_trial', '聲音載入失敗,請檢查網路後再按一次。'); });
+  var p = audio.play(); if (p && p.catch) p.catch(function () { stopAudio(); });
+}
+function setPlayBtn(btn, label, done) {
+  var idle = done ? '✓ ' + label + '(再聽一次)' : '▶ 播放 ' + label;
+  btn.setAttribute('data-idle', idle); btn.textContent = idle; btn.classList.toggle('done', !!done);
+}
+
+// ---------- 送出(Google 試算表);失敗的留在 pending,之後再送
+function send(rows) {
+  if (!SUBMIT || !rows.length) return;
+  var body = JSON.stringify({test: TEST, listener: st.sid, name: clean(st.name), dialect: dialectStr(), frequency: st.freq,
+                             rows: rows, ua: navigator.userAgent.slice(0, 120)});
+  var ids = rows.map(function (r) { return r.trial; });
+  var drop = function () {
+    st.pending = st.pending.filter(function (r) { return ids.indexOf(r.trial) < 0; }); save(); updateDone();
+  };
+  try {
+    if (window.fetch) {
+      fetch(SUBMIT, {method: 'POST', mode: 'no-cors', keepalive: true, headers: {'Content-Type': 'text/plain;charset=utf-8'}, body: body})
+        .then(drop, function () { updateDone(); });
+    } else if (navigator.sendBeacon && navigator.sendBeacon(SUBMIT, body)) { drop(); }
+  } catch (e) { updateDone(); }
+}
+
+// ---------- 開始頁
+function toggleChip(box, multi, onChange) {
+  box.addEventListener('click', function (ev) {
+    var b = ev.target.closest ? ev.target.closest('.chip') : ev.target;
+    if (!b || !b.getAttribute('data-v')) return;
+    if (!multi) { var all = box.querySelectorAll('.chip'); for (var k = 0; k < all.length; k++) all[k].classList.remove('sel'); }
+    b.classList.toggle('sel', multi ? !b.classList.contains('sel') : true);
+    onChange();
+  });
+}
+function readIntro() {
+  st.name = $('name').value; st.other = $('dia_other').value;
+  st.dia = []; var d = $('dia').querySelectorAll('.chip.sel'); for (var k = 0; k < d.length; k++) st.dia.push(d[k].getAttribute('data-v'));
+  var f = $('freq').querySelector('.chip.sel'); st.freq = f ? f.getAttribute('data-v') : '';
+  show('dia_other', st.dia.indexOf('其他') >= 0);
+}
+function start() {
+  readIntro();
+  if (!clean(st.name)) return say('msg_intro', '請填寫您的稱呼');
+  if (!st.dia.length) return say('msg_intro', '請選擇您會說的腔調(可以選很多個)');
+  if (!st.freq) return say('msg_intro', '請選擇平常多久說一次客語');
+  st.i = 0; st.ans = []; st.pending = []; st.finished = false; save();
+  begin();
+}
+function begin() { stopAudio(); show('intro', false); show('resume', false); show('test', true); if (st.i < TRIALS.length) trial(); else finish(); }
+
+// ---------- 每一題
+function options(box, q) {
+  var h = '';
+  for (var k = 0; k < CHOICES.length; k++)
+    h += '<button type="button" class="opt' + (CHOICES[k][0] === 0 ? ' mid' : '') + '" data-q="' + q + '" data-v="' + CHOICES[k][0] + '" disabled>' + CHOICES[k][1] + '</button>';
+  $(box).innerHTML = h;
+}
+function enableOptions() {
+  var ok = cur.p1 && cur.p2, b = document.querySelectorAll('.opt');
+  for (var k = 0; k < b.length; k++) b[k].disabled = !ok;
+  show('hint_play', !ok);
+}
+function trial() {
+  var t = TRIALS[st.i];
+  cur = {q1: null, q2: null, p1: false, p2: false, t0: Date.now()};
+  say('prog', '第 ' + (st.i + 1) + ' 題,共 ' + TRIALS.length + ' 題');
+  $('bar').style.width = (100 * st.i / TRIALS.length) + '%';
+  setPlayBtn($('btn_p1'), '第 1 段', false); setPlayBtn($('btn_p2'), '第 2 段', false);
+  options('q1', 'q1'); options('q2', 'q2'); enableOptions(); say('msg_trial', '');
+  window.scrollTo(0, 0);
+}
+function pick(ev) {
+  var b = ev.target.closest ? ev.target.closest('.opt') : ev.target;
+  if (!b || b.disabled || !b.getAttribute('data-q')) return;
+  var q = b.getAttribute('data-q'), sib = $(q).querySelectorAll('.opt');
+  for (var k = 0; k < sib.length; k++) sib[k].classList.remove('sel');
+  b.classList.add('sel'); cur[q] = parseInt(b.getAttribute('data-v'), 10); say('msg_trial', '');
+}
+function next() {
+  if (!(cur.p1 && cur.p2)) return say('msg_trial', '請先把兩段都聽過');
+  if (cur.q1 === null || cur.q2 === null) return say('msg_trial', '兩個問題都要選一個答案');
+  stopAudio();
+  var row = {trial: TRIALS[st.i].id, q1: cur.q1, q2: cur.q2, sec: ((Date.now() - cur.t0) / 1000).toFixed(1)};
+  st.ans.push(row); st.pending.push(row); st.i++; save();
+  send(st.pending.slice());
+  if (st.i < TRIALS.length) trial(); else finish();
+}
+
+// ---------- 完成
+function csv() {
+  var s = 'listener,name,dialect,frequency,trial,q1,q2,seconds\n';
+  for (var k = 0; k < st.ans.length; k++) {
+    var r = st.ans[k]; s += [st.sid, clean(st.name), dialectStr(), st.freq, r.trial, r.q1, r.q2, r.sec].join(',') + '\n';
+  }
+  return s;
+}
+function fname() { return 'listening_' + TEST + '_' + st.sid + '.csv'; }
+function updateDone() {
+  if (!SUBMIT) return;
+  show('sent_ok', st.pending.length === 0); show('sent_retry', st.pending.length > 0);
+}
+function finish() {
+  stopAudio(); st.finished = true; save();
+  show('test', false); show('intro', false); show('resume', false); show('done', true);
+  show('done_online', !!SUBMIT); show('done_offline', !SUBMIT);
+  if (SUBMIT) { send(st.pending.slice()); updateDone(); } else { $('csv').value = csv(); }
+  window.scrollTo(0, 0);
+}
+function download() {
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['﻿' + csv()], {type: 'text/csv'})); a.download = fname();
+  document.body.appendChild(a); a.click(); a.remove();
+}
+function share() {
+  try {
+    var file = new File(['﻿' + csv()], fname(), {type: 'text/csv'});
+    if (navigator.canShare && navigator.canShare({files: [file]})) { navigator.share({files: [file], title: fname()}).catch(function () {}); return; }
+    if (navigator.share) { navigator.share({title: fname(), text: csv()}).catch(function () {}); return; }
+  } catch (e) {}
+  say('msg_done', '這支手機不支援直接傳送,請改用「複製結果文字」。');
+}
+function copy() {
+  var t = $('csv'); t.focus(); t.select(); var ok = false;
+  try { ok = document.execCommand('copy'); } catch (e) {}
+  say('msg_done', ok ? '已複製,請貼到 LINE 傳給研究者。' : '請長按下面的文字,全選後複製。');
+}
+
+// ---------- 初始化
+show('nojs', false);
+if (LABEL) say('label', '(' + LABEL + ')');
+say('n_trials', TRIALS.length); say('n_min', Math.max(5, Math.round(TRIALS.length * 0.45)));
+toggleChip($('dia'), true, readIntro); toggleChip($('freq'), false, readIntro);
+setPlayBtn($('btn_vol'), '試聽', false);
+$('btn_vol').addEventListener('click', function () {
+  play($('btn_vol'), 'stimuli/' + TRIALS[0].id + '_1.wav', function () { setPlayBtn($('btn_vol'), '試聽', true); });
+});
+$('btn_p1').addEventListener('click', function () {
+  play($('btn_p1'), 'stimuli/' + TRIALS[st.i].id + '_1.wav', function () { cur.p1 = true; setPlayBtn($('btn_p1'), '第 1 段', true); enableOptions(); });
+});
+$('btn_p2').addEventListener('click', function () {
+  play($('btn_p2'), 'stimuli/' + TRIALS[st.i].id + '_2.wav', function () { cur.p2 = true; setPlayBtn($('btn_p2'), '第 2 段', true); enableOptions(); });
+});
+$('q1').addEventListener('click', pick); $('q2').addEventListener('click', pick);
+$('btn_start').addEventListener('click', start); $('btn_next').addEventListener('click', next);
+$('btn_resend').addEventListener('click', function () { send(st.pending.slice()); });
+$('btn_download').addEventListener('click', download); $('btn_share').addEventListener('click', share); $('btn_copy').addEventListener('click', copy);
+
+var prev = load();
+if (prev && prev.sid) {
+  st = prev; st.pending = st.pending || [];
+  if (st.finished) { finish(); }
+  else if (st.ans && st.ans.length) {
+    say('resume_text', '上次做到第 ' + st.ans.length + ' 題(共 ' + TRIALS.length + ' 題),要接著做嗎?');
+    show('resume', true); show('intro', false);
+  }
+} else { st.sid = newId(); save(); }
+$('btn_resume').addEventListener('click', function () { send(st.pending.slice()); begin(); });
+$('btn_restart').addEventListener('click', function () {
+  var sid = st.sid; st = {sid: sid, name: '', dia: [], other: '', freq: '', i: 0, ans: [], pending: [], finished: false}; save();
+  show('resume', false); show('intro', true);
+});
+</script>
+</body>
+</html>

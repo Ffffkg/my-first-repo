@@ -1,0 +1,25 @@
+# @package _global_
+defaults:
+- override /callbacks: fair.yaml
+- override /data: fair1h_joint_sixian_mfadur
+tags:
+- fair1h
+- joint
+- sixian
+- transfer
+- s1234
+- c2_mfadur
+run_name: c2_mfadur_fair1h_joint_sixian_transfer_s1234
+seed: 1234
+transfer_from: /home/ken-fang/Matcha-TTS/logs/train/hakka_joint_hailu_ladder_48h/runs/2026-07-19_15-59-31/checkpoints/best_0148_0178799_2.0092.ckpt
+model:
+  n_vocab: 222
+  use_precomputed_durations: true
+trainer:
+  max_steps: 40000
+  max_epochs: -1
+  val_check_interval: 1000
+  check_val_every_n_epoch: null
+  log_every_n_steps: 25
+  deterministic: false
+test: false
