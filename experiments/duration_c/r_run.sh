@@ -8,13 +8,15 @@
 #   nohup bash r_run.sh > ~/hakka_tts/runs/r.log 2>&1 &
 #   DIALECTS="sixian hailu"(預設)  STEPS=20000  SAVE="2500,5000,10000,15000,20000"(在驗證集上從中選一個)
 #   REPORT_ONLY=1 bash r_run.sh    # 不訓練,只出報告
+#   延長訓練(另存新的實驗名稱,不覆蓋 2 萬步的結果;報告會把兩者並列):
+#   TAG=_40k STEPS=40000 SAVE="5000,10000,20000,30000,40000" bash r_run.sh
 # 用 GPU:煙霧測試會印出每步秒數;預估每次訓練 2–4 小時 × 6 次,加上驗證集選步數與測試評估,約 1.5–2 天。
 set -uo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 H=${HAKKA_ROOT:-$HOME/hakka_tts}; RAON=${RAON_ROOT:-$H/raon}
 E=$H/exp_c/eval; O=$H/exp_c/r
 SEEDS="1234 123 2026"; DIALECTS=${DIALECTS:-"sixian hailu"}; STEPS=${STEPS:-20000}
-SAVE=${SAVE:-"2500,5000,10000,15000,20000"}; VAL_PER_SPK=${VAL_PER_SPK:-20}
+SAVE=${SAVE:-"2500,5000,10000,15000,20000"}; VAL_PER_SPK=${VAL_PER_SPK:-20}; TAG=${TAG:-}
 mkdir -p "$O" "$H/runs"
 source ~/miniconda3/etc/profile.d/conda.sh
 act() { set +u; conda activate "$1"; set -u; }
@@ -54,7 +56,7 @@ fi
 # ---------------- 2. 訓練
 if [ "${REPORT_ONLY:-0}" != 1 ]; then
   for d in $DIALECTS; do for s in $SEEDS; do
-    exp=raon_fair1h_${d}_s$s
+    exp=raon${TAG}_fair1h_${d}_s$s
     [ -f "$RAON/runs/$exp/model_$STEPS.pt" ] && continue
     echo "===== 訓練 $exp($(date '+%m-%d %H:%M'))"
     python "$HERE/r_train.py" --exp "$exp" --dialect "$d" --seed "$s" --max-steps "$STEPS" --save-steps "$SAVE" \
@@ -67,10 +69,10 @@ fi
 
 # ---------------- 3. 驗證集選步數(每個種子各自選;全部母音 ±30 ms 命中率)
 pick_step() {
-  local d=$1 s=$2 exp=raon_fair1h_$1_s$2 args=() st name
+  local d=$1 s=$2 exp=raon${TAG}_fair1h_$1_s$2 args=() st name
   for st in ${SAVE//,/ }; do
     [ -f "$RAON/runs/$exp/model_$st.pt" ] || continue
-    name=rval_${d}$(sfx "$s")_step$st
+    name=rval${TAG}_${d}$(sfx "$s")_step$st
     if [ ! -f "$E/$name/syllables_wave.csv" ]; then
       bash "$HERE/r_pipeline.sh" "$d" "$name" "$exp" --which "step$st" --split val --per-spk "$VAL_PER_SPK" \
           --gen-seeds 1234 --no-mcd > "$H/runs/$name.log" 2>&1 || echo "★ 驗證失敗:$name(看 $H/runs/$name.log)" >&2
@@ -79,27 +81,21 @@ pick_step() {
     args+=("$st=$E/$name")
   done
   [ ${#args[@]} -gt 0 ] || return 1
-  python "$HERE/r_pick.py" --dirs "${args[@]}" > "$O/pick_${d}$(sfx "$s").md" || return 1
-  tail -1 "$O/pick_${d}$(sfx "$s").md"
+  python "$HERE/r_pick.py" --dirs "${args[@]}" > "$O/pick${TAG}_${d}$(sfx "$s").md" || return 1
+  tail -1 "$O/pick${TAG}_${d}$(sfx "$s").md"
 }
 
 # ---------------- 4. 測試集評估 + 報告
-find_dir() {  # 系統 腔 種子 步數 → 既有的評估資料夾
-  local sf n; sf=$(sfx "$3")
-  for n in "${1}_${2}${sf}_step${4}_cum" "${1}_${2}${sf}_step${4}"; do
-    [ -f "$E/$n/syllables_wave.csv" ] && { echo "$E/$n"; return 0; }
-  done
-  return 1
-}
+source "$HERE/sys_dirs.sh"
 for d in $DIALECTS; do
   echo "===== $d:驗證集選步數、測試集評估($(date '+%m-%d %H:%M'))"
   R1=""; R2=""
   for s in $SEEDS; do
-    exp=raon_fair1h_${d}_s$s
+    exp=raon${TAG}_fair1h_${d}_s$s
     st=$(pick_step "$d" "$s") || { echo "★ $exp 沒有可用的 checkpoint"; continue; }
-    echo "  [$exp] 驗證集選第 $st 步"; sed -n '1,8p' "$O/pick_${d}$(sfx "$s").md" | grep -E "^\| [0-9]" | sed 's/^/    /'
+    echo "  [$exp] 驗證集選第 $st 步"; sed -n '1,9p' "$O/pick${TAG}_${d}$(sfx "$s").md" | grep -E "^\| [0-9]" | sed 's/^/    /'
     for tot in rate oracle; do
-      name=raon_${d}$(sfx "$s")_step$st$([ $tot = oracle ] && echo _oracle)
+      name=raon${TAG}_${d}$(sfx "$s")_step$st$([ $tot = oracle ] && echo _oracle)
       if [ ! -f "$E/$name/syllables_wave.csv" ]; then
         bash "$HERE/r_pipeline.sh" "$d" "$name" "$exp" --which "step$st" --total $tot > "$H/runs/$name.log" 2>&1 \
             || { echo "★ 評估失敗:$name(看 $H/runs/$name.log)"; act raon; continue; }
@@ -110,15 +106,15 @@ for d in $DIALECTS; do
   done
   act tts
   sys_args=()
-  for spec in "base:base:40000" "xad:c6:40000" "vits:vbase:200000" "vits_xad:vxad:200000"; do
-    IFS=: read -r lab k st <<< "$spec"
-    out=""; for s in $SEEDS; do x=$(find_dir "$k" "$d" "$s" "$st") && out+="$x,"; done
-    [ -n "$out" ] && sys_args+=(--sys "$lab=${out%,}") || echo "  (找不到 $k 的評估結果,報告略過)"
+  KS="base c6 vbase vxad"; [ -n "$TAG" ] && KS+=" raon raon_oracle"
+  for k in $KS; do
+    out=$(sys_dirs "$k" "$d")
+    [ -n "$out" ] && sys_args+=(--sys "$k=$out") || echo "  (找不到 $k 的評估結果,報告略過)"
   done
-  [ -n "$R1" ] && sys_args+=(--sys "raon=${R1%,}")
-  [ -n "$R2" ] && sys_args+=(--sys "raon_oracle=${R2%,}")
+  [ -n "$R1" ] && sys_args+=(--sys "raon$TAG=${R1%,}")
+  [ -n "$R2" ] && sys_args+=(--sys "raon${TAG}_oracle=${R2%,}")
   echo "===== $d:入聲 / 舒聲命中率、ρ、MCD(與 Matcha-TTS Base 比較)"
-  python "$HERE/x1_overlap.py" --dialect "$d" --base base "${sys_args[@]}" --out "$O/r_${d}.md" \
+  python "$HERE/x1_overlap.py" --dialect "$d" --base base "${sys_args[@]}" --out "$O/r${TAG}_${d}.md" \
       | sed -n "/## 全部/,/## 排除/p" | grep -v "## 排除"
   for x in ${R1//,/ } ${R2//,/ }; do
     python -c "import json,sys; j=json.load(open(sys.argv[1]+'/raon_info.json')); print(f\"  {sys.argv[1].split('/')[-1]}:合成長度/真人長度 {j['len_ratio_mean']:.3f}(平均絕對差 {j['len_ratio_abs_err_pct']:.1f}%)\")" "$x"

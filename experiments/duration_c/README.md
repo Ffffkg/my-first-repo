@@ -311,6 +311,7 @@ python e_analyze.py --key ~/hakka_tts/exp_e/hailu_base_vs_c2/key.csv  --response
 | `s4_syldur.sh` | S4:XAD* + 音節→音素雙層時長預測器(factor = 音節總長 × 音節內比例;feat = 音節總長當提示特徵),兩腔 × 三種子,與 x4xad 配對比較;模型修改在 `../matcha_patch`(`apply_patch.sh` 套用) | 是 |
 | `r_setup.sh` | R0:安裝第三種架構 Raon-OpenTTS(KRAFTON 開源的擴散 Transformer + 流匹配,F5-TTS 架構;DiTTo-TTS 沒有公開程式碼):建 `raon` 環境(複製 tts)、下載官方 0.3B 權重與 16 kHz HiFi-GAN、在 CPU 上檢查載入 | 否 |
 | `r_run.sh` | R:Raon-OpenTTS 從英文預訓練權重微調,1 小時清單(與 Base 相同)× 兩腔 × 三種子;煙霧測試 → 訓練 → 驗證集選步數(`r_pick.py`)→ 測試集 D1(總長用語速估 = 主要結果;給真人總長 = 診斷)→ 與 Matcha-TTS / VITS 並列(`x1_overlap.py`) | 是 |
+| `r_next.sh` | R 後續一鍵:語音辨識檢查(`r_asr.sh`)→ 相同頻寬 MCD(`r_mcd16.py`,濾掉 8 kHz 以上)→ Raon 延長到 4 萬步(`TAG=_40k`)→ 總表 `final_<腔>.md`;`sys_dirs.sh` 依驗證集紀錄找各系統的評估資料夾 | 是 |
 | `r_prep.py`、`r_train.py`、`r_synth.py`、`r_pipeline.sh`、`hakka_c/raon_io.py` | Raon-OpenTTS 的資料準備(拼音文字、16 kHz、語速、聲音提示句、詞表擴充)、微調、合成(輸出格式同 `c_eval.py --synth`,`bounds` 的 `frames` 為 null)、一行跑完合成 + MFA + `d1_compare.py` | 部分 |
 | `v_train.py` | 客語 VITS 訓練(單 GPU;損失與超參數同官方;`--durations mfa` = +AD、`--init-from` = 跨腔初始化、`--dp-kernel/--dp-filter` = 放大 DP) | 是 |
 | `hakka_c/vits_model.py`、`hakka_c/vits_io.py` | 包裝官方 VITS(不改原始碼):Matcha 文字前端、MFA 時長路徑、確定性 DP;評估用的 VitsEngine(`c_eval.py` / `c3_target_check.py` / `d1_pipeline.sh` 加 `--arch vits`) | — |

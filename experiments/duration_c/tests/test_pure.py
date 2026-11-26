@@ -1004,3 +1004,36 @@ def test_raon_check_alignment():
     bad = {t: i for i, t in enumerate([" ", "a", "é", "z"])}       # ASCII 不全在前面(也不是排序好的)
     with pytest.raises(RuntimeError):
         R.check_alignment(bad, 3, "a")
+
+
+def test_sys_dirs(tmp_path):
+    """sys_dirs.sh:Raon 依 pick 檔的步數找資料夾;沒有驗證集紀錄時,Matcha / VITS 取存在的那個(cum 優先)。"""
+    H, E = tmp_path, tmp_path / "exp_c" / "eval"
+    (H / "exp_c" / "r").mkdir(parents=True)
+    mk = lambda n: (E / n).mkdir(parents=True) or (E / n / "syllables_wave.csv").write_text("x")  # noqa: E731
+    for s, sf in ((1234, ""), (123, "_s123"), (2026, "_s2026")):
+        (H / "exp_c" / "r" / f"pick_40k_sixian{sf}.md").write_text("| 步數 |\n30000\n")
+        mk(f"raon_40k_sixian{sf}_step30000")
+        mk(f"raon_40k_sixian{sf}_step30000_oracle")
+        mk(f"base_sixian{sf}_step40000_cum")
+    mk("vbase_sixian_step200000")
+    cmd = (f'H={H}; E={E}; HERE={ROOT}; source {ROOT}/sys_dirs.sh; '
+           'sys_dirs raon_40k sixian; sys_dirs raon_40k_oracle sixian; sys_dirs base sixian; sys_dirs vbase sixian; sys_dirs raon sixian')
+    out = subprocess.run(["bash", "-c", cmd], capture_output=True, text=True)
+    lines = out.stdout.split("\n")[:5]
+    assert lines[0] == ",".join(f"{E}/raon_40k_sixian{sf}_step30000" for sf in ("", "_s123", "_s2026"))
+    assert lines[1].endswith("raon_40k_sixian_s2026_step30000_oracle") and lines[1].count(",") == 2
+    assert lines[2].count("_cum") == 3
+    assert lines[3] == f"{E}/vbase_sixian_step200000"
+    assert lines[4] == "" and "沒有" in out.stderr
+
+
+def test_r_mcd16_band():
+    """band16:長度不變,4 kHz 正弦幾乎不受影響,10 kHz 正弦被濾掉。"""
+    pytest.importorskip("scipy")
+    sys.path.insert(0, str(ROOT))
+    from r_mcd16 import band16
+    t = np.arange(22050) / 22050
+    lo, hi = np.sin(2 * np.pi * 4000 * t), np.sin(2 * np.pi * 10000 * t)
+    assert len(band16(lo)) == len(lo)
+    assert np.std(band16(lo)[2000:-2000]) > 0.95 * np.std(lo) and np.std(band16(hi)[2000:-2000]) < 0.05

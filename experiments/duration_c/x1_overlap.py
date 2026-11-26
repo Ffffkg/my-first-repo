@@ -48,6 +48,7 @@ def tsv_texts(path):
 
 
 SYL_CSV = "syllables_wave.csv"      # --csv 可改成 x3_remeasure.py 的 syllables_wave_x3.csv
+MCD_CSV = "mcd.csv"                 # --mcd-csv 可改成 r_mcd16.py 的 mcd16.csv(全部系統限制在 8 kHz 以下)
 
 
 def hit_counts(dirs, stems, entering):
@@ -79,7 +80,7 @@ def mcd_per_stem(dirs, stems):
     """每句 MCD(生成種子平均,再對訓練種子平均);沒有 mcd.csv 時回傳 None。"""
     rows = []
     for d in dirs:
-        f = Path(d) / "mcd.csv"
+        f = Path(d) / MCD_CSV
         if not f.exists():
             return None
         c = read_cols(f)
@@ -123,13 +124,13 @@ def report(systems, base, stems, n_boot, seed=42):
                 draws = dd[sel].sum(axis=1) / np.maximum(ok[sel].sum(axis=1), 1)
                 cells.append(ci(dd.sum() / max(ok.sum(), 1), draws, scale=1.0, digits=3))
             else:
-                cells.append("(沒有 mcd.csv)")
+                cells.append(f"(沒有 {MCD_CSV})")
         L.append(f"| {k}({len(systems[k])} 種子) | " + " | ".join(cells) + " |")
     return L
 
 
 def main():
-    global SYL_CSV
+    global SYL_CSV, MCD_CSV
     ap = argparse.ArgumentParser()
     ap.add_argument("--dialect", required=True, choices=C.DIALECTS)
     ap.add_argument("--sys", action="append", required=True, metavar="NAME=DIR1,DIR2,...")
@@ -138,9 +139,10 @@ def main():
     ap.add_argument("--src-tsv", help=f"預設 {C.BENCH}/<另一腔>/train_full.tsv")
     ap.add_argument("--n-boot", type=int, default=5000)
     ap.add_argument("--csv", default=SYL_CSV, help="逐音節檔名(X3 用 syllables_wave_x3.csv)")
+    ap.add_argument("--mcd-csv", default=MCD_CSV, help="MCD 檔名(r_mcd16.py 的 mcd16.csv)")
     ap.add_argument("--out")
     args = ap.parse_args()
-    SYL_CSV = args.csv
+    SYL_CSV, MCD_CSV = args.csv, args.mcd_csv
 
     other = [d for d in C.DIALECTS if d != args.dialect][0]
     test = tsv_texts(Path(args.test_tsv or C.BENCH / args.dialect / "test.tsv").expanduser())
